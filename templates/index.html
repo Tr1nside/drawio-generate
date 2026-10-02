@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Генератор блок-схем (drawio)</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <header>
+    <h1>Генератор блок-схем из Python</h1>
+    <p class="hint">Вставьте код, нажмите «Построить блок-схему» и скачайте файл <code>.drawio</code>.</p>
+  </header>
+
+  <main>
+    <section class="workspace">
+      <div class="pane editor-pane">
+        <textarea id="code" spellcheck="false" placeholder="def main():
+    ..."></textarea>
+
+        <div class="actions">
+          <button id="convert" type="button">Построить блок-схему</button>
+          <button id="download" type="button" disabled>Скачать .drawio</button>
+        </div>
+
+        <p id="status" class="status" role="status"></p>
+      </div>
+
+      <div class="pane preview-pane">
+        <div class="preview-head">
+          <span class="preview-title">Предпросмотр</span>
+          <div id="tabs" class="tabs"></div>
+          <div class="zoom">
+            <button id="zoom-out" type="button" title="Уменьшить">−</button>
+            <span id="zoom-level">60%</span>
+            <button id="zoom-in" type="button" title="Увеличить">+</button>
+          </div>
+        </div>
+        <div id="preview" class="preview">
+          <p class="preview-empty">Здесь появится схема после построения.</p>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script src="{{ url_for('static', filename='app.js') }}"></script>
+</body>
+</html>
