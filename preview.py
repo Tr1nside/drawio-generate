@@ -1,9 +1,9 @@
 """Отрисовка уложенных страниц в SVG для предпросмотра."""
 
-from layout import Cell, Edge, PageLayout, route_edge
+from layout import Cell, Edge, PageLayout, route_edge, wrap_lines
 
 FONT_SIZE = 12
-LINE_HEIGHT = 16
+LINE_HEIGHT = 20
 PAD = 24
 
 KIND_STYLE = {
@@ -28,28 +28,12 @@ def _esc(value: str) -> str:
 
 
 def _wrap(text: str, width: float) -> list[str]:
-    max_chars = max(4, int(width / (FONT_SIZE * 0.62)))
-    lines: list[str] = []
-    for raw in (text or "").splitlines() or [""]:
-        words = raw.split()
-        if not words:
-            lines.append("")
-            continue
-        cur = ""
-        for word in words:
-            if not cur:
-                cur = word
-            elif len(cur) + 1 + len(word) <= max_chars:
-                cur += " " + word
-            else:
-                lines.append(cur)
-                cur = word
-        lines.append(cur)
-    return lines
+    return wrap_lines(text, max(4.0, width))
 
 
 def _text_svg(cell: Cell) -> str:
-    lines = _wrap(cell.text, cell.w - 16)
+    factor = {"rhombus": 0.5, "hexagon": 0.72}.get(cell.kind, 1.0)
+    lines = _wrap(cell.text, (cell.w - 16) * factor)
     cx = cell.x + cell.w / 2
     cy = cell.y + cell.h / 2
     start = cy - (len(lines) - 1) * LINE_HEIGHT / 2 + FONT_SIZE * 0.35

@@ -8,8 +8,6 @@ from drawio import build_mxfile
 from layout import layout_pages, route_edge
 from parser import parse_pages
 
-_points_for = route_edge
-
 CS_DIR = Path("/Users/chertik/Documents/Projects/CS")
 OUT_DIR = Path(__file__).parent / "out"
 
@@ -82,18 +80,45 @@ def _segments(points):
     return list(zip(points, points[1:]))
 
 
+def _segment_hits_rect(p, q, r, pad=2.0):
+    x1, y1 = p
+    x2, y2 = q
+    rx0, ry0 = r.x + pad, r.y + pad
+    rx1, ry1 = r.x + r.w - pad, r.y + r.h - pad
+    if rx1 <= rx0 or ry1 <= ry0:
+        return False
+    dx, dy = x2 - x1, y2 - y1
+    t0, t1 = 0.0, 1.0
+    for pp, qq in ((-dx, x1 - rx0), (dx, rx1 - x1), (-dy, y1 - ry0), (dy, ry1 - y1)):
+        if pp == 0:
+            if qq < 0:
+                return False
+        else:
+            t = qq / pp
+            if pp < 0:
+                if t > t1:
+                    return False
+                t0 = max(t0, t)
+            else:
+                if t < t0:
+                    return False
+                t1 = min(t1, t)
+    return True
+
+
 def metrics(layouts):
     crossings = 0
     overlaps = 0
+    node_crossings = 0
     per_page = {}
     for page in layouts:
         cells = {c.cid: c for c in page.cells}
-        polys = [_points_for(edge, cells) for edge in page.edges]
+        polys = [(edge, route_edge(edge, cells)) for edge in page.edges]
         page_cross = 0
         for i in range(len(polys)):
             for j in range(i + 1, len(polys)):
-                for a in _segments(polys[i]):
-                    for b in _segments(polys[j]):
+                for a in _segments(polys[i][1]):
+                    for b in _segments(polys[j][1]):
                         if _cross(a[0], a[1], b[0], b[1]):
                             page_cross += 1
         real = [c for c in page.cells if c.kind != "junction"]
@@ -102,10 +127,19 @@ def metrics(layouts):
             for b in real[i + 1:]:
                 if a.x < b.x + b.w and b.x < a.x + a.w and a.y < b.y + b.h and b.y < a.y + a.h:
                     page_overlap += 1
+        page_node = 0
+        for edge, points in polys:
+            for seg in _segments(points):
+                for c in real:
+                    if c.cid in (edge.source, edge.target):
+                        continue
+                    if _segment_hits_rect(seg[0], seg[1], c):
+                        page_node += 1
         crossings += page_cross
         overlaps += page_overlap
-        per_page[page.name] = (page_cross, page_overlap)
-    return crossings, overlaps, per_page
+        node_crossings += page_node
+        per_page[page.name] = (page_cross, page_overlap, page_node)
+    return crossings, overlaps, node_crossings, per_page
 
 
 def main():
@@ -128,11 +162,11 @@ def main():
         out.write_text(xml, encoding="utf-8")
 
         diagrams = analyse(xml)
-        crossings, overlaps, per_page = metrics(layouts)
+        crossings, overlaps, node_crossings, per_page = metrics(layouts)
         print(f"  страниц: {len(diagrams)} -> {', '.join(diagrams)}")
         for name, counts in diagrams.items():
-            pc, po = per_page.get(name, (0, 0))
-            print(f"  [{name}] {counts}  пересечений={pc} наложений={po}")
+            pc, po, pn = per_page.get(name, (0, 0, 0))
+            print(f"  [{name}] {counts}  пересечений={pc} наложений={po} сквозь узлы={pn}")
 
         if set(diagrams) != expected["pages"]:
             print(f"  FAIL: страницы {set(diagrams)} != {expected['pages']}")
@@ -159,8 +193,11 @@ def main():
         if overlaps > 0:
             print(f"  FAIL: наложений фигур {overlaps}")
             failed = True
+        if node_crossings > 0:
+            print(f"  FAIL: рёбра проходят сквозь узлы: {node_crossings}")
+            failed = True
 
-        print(f"  итого пересечений={crossings}, наложений={overlaps}")
+        print(f"  итого пересечений={crossings}, наложений={overlaps}, сквозь узлы={node_crossings}")
         print(f"  сохранено: {out}")
 
     print("\nИТОГ:", "ОШИБКИ" if failed else "всё успешно")

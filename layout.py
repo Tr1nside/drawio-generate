@@ -31,6 +31,9 @@ BACK_MARGIN = 40
 LANE_W = 20
 J = 1
 LINE_H = 20
+CHAR_W = 7.2
+MAX_W = 360
+TEXT_PAD = 24
 
 
 @dataclass
@@ -87,7 +90,28 @@ def _line_count(text: str) -> int:
 
 def _fit_width(text: str, base: float) -> float:
     longest = max((len(line) for line in text.splitlines()), default=0)
-    return max(base, min(400, 7 * longest))
+    return max(base, min(MAX_W, int(longest * CHAR_W) + TEXT_PAD))
+
+
+def wrap_lines(text: str, width: float) -> list:
+    max_chars = max(4, int(width / CHAR_W))
+    lines: list = []
+    for raw in (text or "").splitlines() or [""]:
+        words = raw.split()
+        if not words:
+            lines.append("")
+            continue
+        cur = ""
+        for word in words:
+            if not cur:
+                cur = word
+            elif len(cur) + 1 + len(word) <= max_chars:
+                cur += " " + word
+            else:
+                lines.append(cur)
+                cur = word
+        lines.append(cur)
+    return lines
 
 
 def anchor_point(cell: Cell, side: str) -> tuple[float, float]:
@@ -141,7 +165,7 @@ class LayoutEngine:
         self.cells: list[Cell] = []
         self.edges: list[Edge] = []
         self.return_ids: list[int] = []
-        self._return_lanes: list[tuple[float, float, float]] = []
+        self._return_lanes: dict = {"l": [], "r": []}
         self._id = 1
 
     def _nid(self) -> int:
@@ -173,10 +197,30 @@ class LayoutEngine:
 
     # --- измерение -------------------------------------------------------
     def simple_size(self, text: str) -> tuple[float, float]:
-        lines = _line_count(text)
         w = _fit_width(text, PROC_W)
-        h = PROC_H + LINE_H * (lines - 1)
+        lines = wrap_lines(text, w - 16)
+        h = max(PROC_H, len(lines) * LINE_H + 20)
         return w, h
+
+    @staticmethod
+    def shape_size(text: str, base_w: float, base_h: float, factor: float) -> tuple[float, float]:
+        w = _fit_width(text, base_w)
+        inner = max(40.0, (w - 16) * factor)
+        lines = wrap_lines(text, inner)
+        h = max(base_h, len(lines) * LINE_H + 24)
+        return w, h
+
+    def condition_size(self, text: str) -> tuple[float, float]:
+        w = _fit_width(text, RHOMBUS_W)
+        lines = wrap_lines(text, w * 0.5)
+        longest = max((len(line) for line in lines), default=0)
+        w = max(w, int(longest * CHAR_W / 0.6) + 16)
+        lines = wrap_lines(text, w * 0.5)
+        h = max(RHOMBUS_H, int(len(lines) * LINE_H / 0.6) + 16)
+        return w, h
+
+    def for_size(self, text: str) -> tuple[float, float]:
+        return self.shape_size(text, HEX_W, HEX_H, 0.72)
 
     def measure(self, node) -> tuple[float, float]:
         if isinstance(node, Sequence):
@@ -196,34 +240,51 @@ class LayoutEngine:
             return self.simple_size(node.text)
 
         if isinstance(node, If):
-            bw, bh = self.measure(node.body)
-            has_else = node.else_body is not None and bool(node.else_body.items)
-            ew, eh = self.measure(node.else_body) if node.else_body is not None else (0.0, 0.0)
-            body_h = max(bh, eh if has_else else 0.0)
-            right_w = ew if has_else else 0.0
-            w = max(RHOMBUS_W, bw + (GAP + right_w if right_w else 0.0))
-            if body_h:
-                h = RHOMBUS_H + GAP + body_h + GAP + J
-            else:
-                h = RHOMBUS_H + GAP + J
-            return w, h
+            geo = self._if_geometry(node)
+            return geo["w"], geo["h"]
 
         if isinstance(node, While):
-            return self._measure_loop(node, RHOMBUS_H)
+            geo = self._loop_geometry(node, "rhombus")
+            return geo["w"], geo["h"]
 
         if isinstance(node, For):
-            return self._measure_loop(node, HEX_H)
+            geo = self._loop_geometry(node, "hexagon")
+            return geo["w"], geo["h"]
 
         return PROC_W, PROC_H
 
-    def _measure_loop(self, node, head_h: float) -> tuple[float, float]:
-        bw, bh = self.measure(node.body)
-        head_w = RHOMBUS_W if head_h == RHOMBUS_H else HEX_W
-        content_w = max(head_w, bw)
+    def _if_geometry(self, node: If) -> dict:
+        dw, dh = self.condition_size(node.condition)
+        has_else = node.else_body is not None and bool(node.else_body.items)
+        bw, bh = self.measure(node.body) if node.body.items else (0.0, 0.0)
+        ew, eh = self.measure(node.else_body) if has_else else (0.0, 0.0)
+        spine_rel = max(dw / 2, bw + GAP / 2)
+        right_extent = max(dw / 2, (GAP / 2 + ew) if has_else else 0.0)
+        w = max(dw, spine_rel + right_extent)
+        body_h = max(bh, eh if has_else else 0.0)
+        h = dh + GAP + (body_h + GAP if body_h else 0.0) + J
+        return {
+            "dw": dw, "dh": dh, "has_else": has_else,
+            "bw": bw, "bh": bh, "ew": ew, "eh": eh,
+            "spine_rel": spine_rel, "w": w, "h": h,
+        }
+
+    def _loop_geometry(self, node, head_kind: str) -> dict:
+        if head_kind == "hexagon":
+            head_text = node.text
+            hw, hh = self.for_size(head_text)
+        else:
+            head_text = node.condition
+            hw, hh = self.condition_size(head_text)
+        bw, bh = self.measure(node.body) if node.body.items else (0.0, 0.0)
+        content_w = max(hw, bw)
         w = content_w + 2 * BACK_MARGIN
         body_part = (GAP + bh) if bh else 0.0
-        h = head_h + body_part + GAP + J + GAP + J
-        return w, h
+        h = hh + body_part + GAP + J + GAP + J
+        return {
+            "hw": hw, "hh": hh, "head_text": head_text,
+            "bw": bw, "bh": bh, "content_w": content_w, "w": w, "h": h,
+        }
 
     # --- укладка ---------------------------------------------------------
     def place(self, node, x: float, y: float, ctx=None) -> Block:
@@ -280,11 +341,18 @@ class LayoutEngine:
         w, h = self.simple_size(node.text)
         cell = self._add_cell("process", node.text, x, y, w, h)
         if ctx is not None:
+            cx = cell.x + cell.w / 2
             cy = cell.y + cell.h / 2
             if isinstance(node, Break):
+                exit_j = ctx["exit_j"]
+                ex_cx = exit_j.x + exit_j.w / 2
+                ex_cy = exit_j.y + exit_j.h / 2
+                side = "l" if cx < ex_cx else "r"
+                lane = ctx["left"] if side == "l" else ctx["right"]
                 self._add_edge(
-                    cell.cid, ctx["exit_j"].cid, "", [(ctx["right"], cy)],
-                    exit_side="r", entry_side="t",
+                    cell.cid, exit_j.cid, "",
+                    [(lane, cy), (lane, ex_cy)],
+                    exit_side=side, entry_side=side,
                 )
             else:
                 head = ctx["head"]
@@ -296,31 +364,28 @@ class LayoutEngine:
         return Block(cell, [Conn(cell)], w, h)
 
     def _place_if(self, node: If, x: float, y: float, ctx) -> Block:
-        w, h = self.measure(node)
-        spine = x + w / 2
-        diamond = self._add_cell(
-            "rhombus", node.condition, spine - RHOMBUS_W / 2, y, RHOMBUS_W, RHOMBUS_H
-        )
-        body_y = y + RHOMBUS_H + GAP
-        has_else = node.else_body is not None and bool(node.else_body.items)
+        geo = self._if_geometry(node)
+        w, h = geo["w"], geo["h"]
+        dw, dh = geo["dw"], geo["dh"]
+        spine = x + geo["spine_rel"]
+        diamond = self._add_cell("rhombus", node.condition, spine - dw / 2, y, dw, dh)
+        body_y = y + dh + GAP
 
-        base_bottom = y + RHOMBUS_H
+        base_bottom = y + dh
         true_block = None
         false_block = None
 
         if node.body.items:
-            bw, bh = self.measure(node.body)
-            bx = max(x, spine - GAP / 2 - bw)
+            bx = spine - GAP / 2 - geo["bw"]
             true_block = self.place(node.body, bx, body_y, ctx)
             self._add_edge(diamond.cid, true_block.entry.cid, "Да", exit_side="l", entry_side="t")
-            base_bottom = max(base_bottom, body_y + bh)
+            base_bottom = max(base_bottom, body_y + geo["bh"])
 
-        if has_else:
-            ew, eh = self.measure(node.else_body)
+        if geo["has_else"]:
             fx = spine + GAP / 2
             false_block = self.place(node.else_body, fx, body_y, ctx)
             self._add_edge(diamond.cid, false_block.entry.cid, "Нет", exit_side="r", entry_side="t")
-            base_bottom = max(base_bottom, body_y + eh)
+            base_bottom = max(base_bottom, body_y + geo["eh"])
 
         merge = self._add_junction(spine, base_bottom + GAP)
 
@@ -339,17 +404,15 @@ class LayoutEngine:
         return Block(diamond, [Conn(merge, "", "b")], w, h)
 
     def _place_loop(self, node, x: float, y: float, ctx, head_kind: str) -> Block:
-        w, h = self.measure(node)
+        geo = self._loop_geometry(node, head_kind)
+        w, h = geo["w"], geo["h"]
         margin = BACK_MARGIN
-        content_w = w - 2 * margin
+        content_w = geo["content_w"]
         spine = x + w / 2
-        if head_kind == "hexagon":
-            head_w, head_h, head_text = HEX_W, HEX_H, node.text
-        else:
-            head_w, head_h, head_text = RHOMBUS_W, RHOMBUS_H, node.condition
+        head_w, head_h = geo["hw"], geo["hh"]
 
-        head = self._add_cell(head_kind, head_text, spine - head_w / 2, y, head_w, head_h)
-        bw, bh = self.measure(node.body)
+        head = self._add_cell(head_kind, geo["head_text"], spine - head_w / 2, y, head_w, head_h)
+        bw, bh = geo["bw"], geo["bh"]
         body_y = y + head_h + GAP
         back_j = self._add_junction(spine, body_y + (bh if bh else 0) + GAP)
         exit_j = self._add_junction(spine, back_j.y + J + GAP)
@@ -385,16 +448,18 @@ class LayoutEngine:
 
         return Block(head, [Conn(exit_j, "", "b")], w, h)
 
-    def _alloc_return_lane(self, x_base: float, y0: float, y1: float) -> float:
+    def _alloc_return_lane(self, side: str, x_base: float, y0: float, y1: float) -> float:
+        lanes = self._return_lanes[side]
         k = 0
         while True:
-            x = x_base + LANE_W * (k + 1)
+            offset = LANE_W * (k + 1)
+            x = x_base + offset if side == "r" else x_base - offset
             conflict = any(
                 abs(lx - x) < 0.5 and not (y1 <= ly0 or y0 >= ly1)
-                for lx, ly0, ly1 in self._return_lanes
+                for lx, ly0, ly1 in lanes
             )
             if not conflict:
-                self._return_lanes.append((x, y0, y1))
+                lanes.append((x, y0, y1))
                 return x
             k += 1
 
@@ -428,16 +493,32 @@ def layout_page(page: Page) -> PageLayout:
 
     width = max(content_w, TERM_W)
     merge_cy = merge.y + J / 2
+    left_extent = 0.0
+    right_extent = width
     for rid in engine.return_ids:
         cell = next(c for c in engine.cells if c.cid == rid)
         cy = cell.y + cell.h / 2
-        lane = engine._alloc_return_lane(width, min(cy, merge_cy), max(cy, merge_cy))
+        cx = cell.x + cell.w / 2
+        side = "r" if cx >= content_w / 2 else "l"
+        x_base = width if side == "r" else 0.0
+        lane = engine._alloc_return_lane(side, x_base, min(cy, merge_cy), max(cy, merge_cy))
         engine._add_edge(
             rid, merge.cid, "",
             [(lane, cy), (lane, merge_cy)],
-            exit_side="r", entry_side="r",
+            exit_side=side, entry_side=side,
         )
-        width = max(width, lane + LANE_W)
+        if side == "l":
+            left_extent = min(left_extent, lane - LANE_W)
+        else:
+            right_extent = max(right_extent, lane + LANE_W)
+
+    offset = -left_extent if left_extent < 0 else 0.0
+    if offset:
+        for cell in engine.cells:
+            cell.x += offset
+        for edge in engine.edges:
+            edge.waypoints = [(x + offset, y) for x, y in edge.waypoints]
+    width = right_extent + offset
 
     height = end.y + end.h
     return PageLayout(page.name, engine.cells, engine.edges, width, height, page.func_name)
