@@ -31,6 +31,7 @@ class Output(Node):
 @dataclass
 class FuncCall(Node):
     text: str = ""
+    call_name: str = ""
 
 
 @dataclass
@@ -41,6 +42,16 @@ class Other(Node):
 @dataclass
 class Return(Node):
     text: str = ""
+
+
+@dataclass
+class Break(Node):
+    text: str = "break"
+
+
+@dataclass
+class Continue(Node):
+    text: str = "continue"
 
 
 @dataclass
@@ -73,3 +84,4 @@ class Page:
     name: str
     body: Sequence
     start_label: str = "Начало"
+    func_name: "str | None" = None

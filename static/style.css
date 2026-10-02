@@ -466,6 +466,14 @@ button:focus-visible,
   animation: fade-in 0.25s ease;
 }
 
+.preview svg .linkable {
+  cursor: pointer;
+}
+
+.preview svg .linkable:hover {
+  filter: drop-shadow(0 0 2px var(--accent));
+}
+
 @keyframes fade-in {
   from {
     opacity: 0;

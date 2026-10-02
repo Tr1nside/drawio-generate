@@ -5,8 +5,10 @@ import xml.etree.ElementTree as ET
 from pathlib import Path
 
 from drawio import build_mxfile
-from layout import layout_pages
+from layout import layout_pages, route_edge
 from parser import parse_pages
+
+_points_for = route_edge
 
 CS_DIR = Path("/Users/chertik/Documents/Projects/CS")
 OUT_DIR = Path(__file__).parent / "out"
@@ -16,27 +18,27 @@ CASES = {
         "pages": {"main", "main_2", "_input_data", "_check_triangle", "_check_equilateralism"},
         "rhombus": 3,
         "io": 9,
+        "max_crossings": 0,
     },
     "LAB4/22.py": {
         "pages": {"main"},
         "rhombus": 2,
         "io": 2,
+        "max_crossings": 0,
     },
     "LAB5/66.py": {
         "pages": {"main"},
         "rhombus": 1,
         "hexagon": 1,
         "io": 2,
+        "max_crossings": 0,
     },
 }
 
 
-def parse_build(source):
-    pages = layout_pages(parse_pages(source))
-    return build_mxfile(pages)
-
-
 def classify(style):
+    if "pointerEvents=0" in style or "opacity=0" in style:
+        return "junction"
     if "arcSize=50" in style:
         return "terminator"
     if style.startswith("rhombus"):
@@ -45,8 +47,6 @@ def classify(style):
         return "hexagon"
     if "shape=parallelogram" in style:
         return "io"
-    if "rounded=0" in style:
-        return "process"
     return "process"
 
 
@@ -54,15 +54,58 @@ def analyse(xml):
     root = ET.fromstring(xml)
     diagrams = {}
     for diagram in root.findall("diagram"):
-        name = diagram.get("name")
         counts = {}
         for cell in diagram.iter("mxCell"):
             if cell.get("vertex") != "1":
                 continue
             kind = classify(cell.get("style", ""))
+            if kind == "junction":
+                continue
             counts[kind] = counts.get(kind, 0) + 1
-        diagrams[name] = counts
+        diagrams[diagram.get("name")] = counts
     return diagrams
+
+
+def _cross(p1, p2, p3, p4):
+    def orient(a, b, c):
+        v = (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0])
+        if abs(v) < 1e-9:
+            return 0
+        return 1 if v > 0 else -1
+
+    o1, o2 = orient(p1, p2, p3), orient(p1, p2, p4)
+    o3, o4 = orient(p3, p4, p1), orient(p3, p4, p2)
+    return o1 * o2 < 0 and o3 * o4 < 0
+
+
+def _segments(points):
+    return list(zip(points, points[1:]))
+
+
+def metrics(layouts):
+    crossings = 0
+    overlaps = 0
+    per_page = {}
+    for page in layouts:
+        cells = {c.cid: c for c in page.cells}
+        polys = [_points_for(edge, cells) for edge in page.edges]
+        page_cross = 0
+        for i in range(len(polys)):
+            for j in range(i + 1, len(polys)):
+                for a in _segments(polys[i]):
+                    for b in _segments(polys[j]):
+                        if _cross(a[0], a[1], b[0], b[1]):
+                            page_cross += 1
+        real = [c for c in page.cells if c.kind != "junction"]
+        page_overlap = 0
+        for i, a in enumerate(real):
+            for b in real[i + 1:]:
+                if a.x < b.x + b.w and b.x < a.x + a.w and a.y < b.y + b.h and b.y < a.y + a.h:
+                    page_overlap += 1
+        crossings += page_cross
+        overlaps += page_overlap
+        per_page[page.name] = (page_cross, page_overlap)
+    return crossings, overlaps, per_page
 
 
 def main():
@@ -70,11 +113,11 @@ def main():
     failed = False
 
     for rel, expected in CASES.items():
-        path = CS_DIR / rel
-        source = path.read_text(encoding="utf-8")
+        source = (CS_DIR / rel).read_text(encoding="utf-8")
         print(f"\n=== {rel} ===")
         try:
-            xml = parse_build(source)
+            layouts = layout_pages(parse_pages(source))
+            xml = build_mxfile(layouts)
             ET.fromstring(xml)
         except Exception as exc:  # noqa: BLE001
             print(f"  FAIL: ошибка построения/парсинга XML: {exc}")
@@ -85,17 +128,19 @@ def main():
         out.write_text(xml, encoding="utf-8")
 
         diagrams = analyse(xml)
+        crossings, overlaps, per_page = metrics(layouts)
         print(f"  страниц: {len(diagrams)} -> {', '.join(diagrams)}")
+        for name, counts in diagrams.items():
+            pc, po = per_page.get(name, (0, 0))
+            print(f"  [{name}] {counts}  пересечений={pc} наложений={po}")
 
         if set(diagrams) != expected["pages"]:
             print(f"  FAIL: страницы {set(diagrams)} != {expected['pages']}")
             failed = True
 
         for name, counts in diagrams.items():
-            terms = counts.get("terminator", 0)
-            print(f"  [{name}] {counts}")
-            if terms != 2:
-                print(f"  FAIL: {name}: ожидалось 2 terminator (начало+конец), получено {terms}")
+            if counts.get("terminator", 0) != 2:
+                print(f"  FAIL: {name}: ожидалось 2 terminator")
                 failed = True
 
         total = {}
@@ -107,6 +152,15 @@ def main():
                 print(f"  FAIL: {key} = {total.get(key, 0)}, ожидалось {expected[key]}")
                 failed = True
 
+        limit = expected.get("max_crossings", 0)
+        if crossings > limit:
+            print(f"  FAIL: пересечений {crossings} > допустимых {limit}")
+            failed = True
+        if overlaps > 0:
+            print(f"  FAIL: наложений фигур {overlaps}")
+            failed = True
+
+        print(f"  итого пересечений={crossings}, наложений={overlaps}")
         print(f"  сохранено: {out}")
 
     print("\nИТОГ:", "ОШИБКИ" if failed else "всё успешно")

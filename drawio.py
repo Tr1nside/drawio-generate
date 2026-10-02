@@ -1,6 +1,6 @@
 """Сериализация уложенных страниц в формат mxfile (drawio)."""
 
-from layout import PageLayout
+from layout import PageLayout, route_edge
 
 NEUTRAL = "fillColor=#ffffff;strokeColor=#333333;"
 
@@ -20,6 +20,10 @@ STYLES = {
         f"shape=hexagon;perimeter=hexagonPerimeter2;whiteSpace=wrap;html=1;fixedSize=1;{NEUTRAL}"
     ),
     "other": f"rounded=0;whiteSpace=wrap;html=1;{NEUTRAL}",
+    "junction": (
+        "ellipse;fillColor=none;strokeColor=none;html=1;"
+        "pointerEvents=0;resizable=0;movable=0;"
+    ),
 }
 
 ANCHORS = {
@@ -29,7 +33,7 @@ ANCHORS = {
     "b": (0.5, 1.0),
 }
 
-EDGE_STYLE = "edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;"
+EDGE_STYLE = "rounded=0;html=1;endArrow=block;"
 
 
 def _anchor_style(exit_side: str, entry_side: str) -> str:
@@ -57,31 +61,41 @@ def _num(value: float) -> str:
     return str(int(round(value)))
 
 
-def _cell_xml(cell) -> str:
+def _cell_xml(cell, link_map: dict) -> str:
     style = STYLES.get(cell.kind, STYLES["process"])
+    if cell.kind == "junction":
+        style += "opacity=0;"
+    link = ""
+    target = link_map.get(cell.link_name) if cell.link_name else None
+    if target is not None:
+        link = f' link="data:page/id,page-{target}"'
     return (
         f'        <mxCell id="{cell.cid}" value="{_esc(cell.text)}" style="{style}" '
-        f'vertex="1" parent="1">\n'
+        f'vertex="1" parent="1"{link}>\n'
         f'          <mxGeometry x="{_num(cell.x)}" y="{_num(cell.y)}" '
         f'width="{_num(cell.w)}" height="{_num(cell.h)}" as="geometry"/>\n'
         f"        </mxCell>"
     )
 
 
-def _edge_xml(edge, index: int) -> str:
-    if edge.waypoints:
-        points = "".join(
+def _edge_xml(edge, index: int, cells: dict, junction_ids: set) -> str:
+    points = route_edge(edge, cells)
+    middle = points[1:-1]
+    if middle:
+        pts = "".join(
             f'\n            <mxPoint x="{_num(px)}" y="{_num(py)}"/>'
-            for px, py in edge.waypoints
+            for px, py in middle
         )
         geometry = (
             '          <mxGeometry relative="1" as="geometry">\n'
-            f'            <Array as="points">{points}\n            </Array>\n'
+            f'            <Array as="points">{pts}\n            </Array>\n'
             "          </mxGeometry>"
         )
     else:
         geometry = '          <mxGeometry relative="1" as="geometry"/>'
     style = EDGE_STYLE + _anchor_style(edge.exit_side, edge.entry_side)
+    if edge.target in junction_ids:
+        style = style.replace("endArrow=block;", "endArrow=none;")
     return (
         f'        <mxCell id="e{index}" value="{_esc(edge.label)}" '
         f'style="{style}" edge="1" parent="1" source="{edge.source}" '
@@ -89,10 +103,15 @@ def _edge_xml(edge, index: int) -> str:
     )
 
 
-def _diagram_xml(page: PageLayout, index: int) -> str:
-    cells = "\n".join(_cell_xml(cell) for cell in page.cells)
+def _diagram_xml(page: PageLayout, index: int, link_map: dict) -> str:
+    cells = "\n".join(_cell_xml(cell, link_map) for cell in page.cells)
+    cell_map = {cell.cid: cell for cell in page.cells}
+    junction_ids = {cell.cid for cell in page.cells if cell.kind == "junction"}
     base = index * 100000
-    edges = "\n".join(_edge_xml(edge, base + i) for i, edge in enumerate(page.edges))
+    edges = "\n".join(
+        _edge_xml(edge, base + i, cell_map, junction_ids)
+        for i, edge in enumerate(page.edges)
+    )
     body = "\n".join(part for part in (cells, edges) if part)
     return (
         f'  <diagram id="page-{index}" name="{_esc(page.name)}">\n'
@@ -110,7 +129,11 @@ def _diagram_xml(page: PageLayout, index: int) -> str:
 
 
 def build_mxfile(pages: list[PageLayout]) -> str:
-    diagrams = "\n".join(_diagram_xml(page, i) for i, page in enumerate(pages))
+    link_map: dict[str, int] = {}
+    for i, page in enumerate(pages):
+        if page.func_name:
+            link_map[page.func_name] = i
+    diagrams = "\n".join(_diagram_xml(page, i, link_map) for i, page in enumerate(pages))
     return (
         '<mxfile host="app.diagrams.net" agent="drawio-gen" type="device">\n'
         f"{diagrams}\n"

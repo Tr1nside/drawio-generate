@@ -3,6 +3,8 @@
 import ast
 
 from ir import (
+    Break,
+    Continue,
     For,
     FuncCall,
     If,
@@ -43,6 +45,12 @@ class Parser:
             and node.func.id == name
         )
 
+    @staticmethod
+    def _call_name(node: ast.AST) -> str:
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name):
+            return node.func.id
+        return ""
+
     def _contains_call(self, node: ast.AST, name: str) -> bool:
         return any(self._is_call(n, name) for n in ast.walk(node))
 
@@ -78,7 +86,7 @@ class Parser:
                 counter += 1
             used.add(name)
             body = Sequence(self._parse_body(fn.body))
-            pages.append(Page(name, body, f"Начало {fn.name}"))
+            pages.append(Page(name, body, f"Начало {fn.name}", func_name=fn.name))
         return pages
 
     def _parse_body(self, body: list) -> list:
@@ -106,6 +114,12 @@ class Parser:
         if isinstance(stmt, ast.Return):
             return [Return(self._expr(stmt))]
 
+        if isinstance(stmt, ast.Break):
+            return [Break()]
+
+        if isinstance(stmt, ast.Continue):
+            return [Continue()]
+
         if isinstance(stmt, ast.Assign):
             return [self._parse_assign(stmt)]
 
@@ -121,7 +135,7 @@ class Parser:
                 return [Output(self._expr(stmt))]
             if self._is_call(call, "input"):
                 return [Input(self._expr(stmt))]
-            return [FuncCall(self._expr(stmt))]
+            return [FuncCall(self._expr(stmt), self._call_name(call))]
 
         if isinstance(stmt, ast.Try):
             nodes: list = list(self._parse_body(stmt.body))

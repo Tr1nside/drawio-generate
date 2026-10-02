@@ -1,6 +1,6 @@
 """Отрисовка уложенных страниц в SVG для предпросмотра."""
 
-from layout import Cell, Edge, PageLayout
+from layout import Cell, Edge, PageLayout, route_edge
 
 FONT_SIZE = 12
 LINE_HEIGHT = 16
@@ -60,7 +60,9 @@ def _text_svg(cell: Cell) -> str:
     return f'<text text-anchor="middle" font-size="{FONT_SIZE}" fill="#1f2733">{spans}</text>'
 
 
-def _shape_svg(cell: Cell) -> str:
+def _shape_svg(cell: Cell, link_map: dict) -> str:
+    if cell.kind == "junction":
+        return ""
     fill, stroke = KIND_STYLE.get(cell.kind, KIND_STYLE["process"])
     x, y, w, h = cell.x, cell.y, cell.w, cell.h
     if cell.kind == "terminator":
@@ -85,66 +87,22 @@ def _shape_svg(cell: Cell) -> str:
         )
     else:
         body = f'<rect x="{x:.1f}" y="{y:.1f}" width="{w:.1f}" height="{h:.1f}"/>'
+    target = link_map.get(cell.link_name) if cell.link_name else None
+    attrs = f' class="linkable" data-page="{_esc(target)}"' if target else ""
     return (
-        f'<g fill="{fill}" stroke="{stroke}" stroke-width="1.5">'
+        f'<g{attrs} fill="{fill}" stroke="{stroke}" stroke-width="1.5">'
         f"{body}{_text_svg(cell)}</g>"
     )
 
 
-def _anchor(rect: Cell, side: str) -> tuple[float, float]:
-    cx = rect.x + rect.w / 2
-    cy = rect.y + rect.h / 2
-    if side == "l":
-        return rect.x, cy
-    if side == "r":
-        return rect.x + rect.w, cy
-    if side == "t":
-        return cx, rect.y
-    return cx, rect.y + rect.h
-
-
-def _dedupe(points: list[tuple[float, float]]) -> list[tuple[float, float]]:
-    out: list[tuple[float, float]] = []
-    for point in points:
-        if not out or abs(point[0] - out[-1][0]) > 0.5 or abs(point[1] - out[-1][1]) > 0.5:
-            out.append(point)
-    return out
-
-
-def _orthogonalize(raw: list, start_side: str) -> list:
-    result = [raw[0]]
-    first = True
-    for q in raw[1:]:
-        p = result[-1]
-        if abs(p[0] - q[0]) < 0.5 or abs(p[1] - q[1]) < 0.5:
-            result.append(q)
-        else:
-            if first and start_side in ("l", "r"):
-                result.append((q[0], p[1]))
-            else:
-                result.append((p[0], q[1]))
-            result.append(q)
-        first = False
-    return _dedupe(result)
-
-
-def _points_for(edge: Edge, cells: dict[int, Cell]) -> list[tuple[float, float]]:
-    source = cells[edge.source]
-    target = cells[edge.target]
-    start = _anchor(source, edge.exit_side)
-    end = _anchor(target, edge.entry_side)
-    raw = [start, *edge.waypoints, end]
-    return _orthogonalize(raw, edge.exit_side)
-
-
-def _edge_svg(edge: Edge, cells: dict[int, Cell], marker_id: str) -> str:
-    points = _points_for(edge, cells)
+def _edge_svg(edge: Edge, cells: dict[int, Cell], marker_id: str, arrow: bool) -> str:
+    points = route_edge(edge, cells)
     path = " ".join(
         ("M" if i == 0 else "L") + f"{px:.1f} {py:.1f}" for i, (px, py) in enumerate(points)
     )
+    marker = f' marker-end="url(#{marker_id})"' if arrow else ""
     parts = [
-        f'<path d="{path}" fill="none" stroke="#666" stroke-width="1.5" '
-        f'marker-end="url(#{marker_id})"/>'
+        f'<path d="{path}" fill="none" stroke="#666" stroke-width="1.5"{marker}/>'
     ]
     if edge.label:
         mid = points[len(points) // 2]
@@ -155,13 +113,17 @@ def _edge_svg(edge: Edge, cells: dict[int, Cell], marker_id: str) -> str:
     return "".join(parts)
 
 
-def page_svg(page: PageLayout, index: int) -> str:
+def page_svg(page: PageLayout, index: int, link_map: dict) -> str:
     width = page.width + PAD * 2
     height = page.height + PAD * 2
     marker_id = f"arrow-{index}"
     cells = {cell.cid: cell for cell in page.cells}
-    edges = "".join(_edge_svg(edge, cells, marker_id) for edge in page.edges)
-    shapes = "".join(_shape_svg(cell) for cell in page.cells)
+    junction_ids = {cell.cid for cell in page.cells if cell.kind == "junction"}
+    edges = "".join(
+        _edge_svg(edge, cells, marker_id, edge.target not in junction_ids)
+        for edge in page.edges
+    )
+    shapes = "".join(_shape_svg(cell, link_map) for cell in page.cells)
     return (
         f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {width:.0f} {height:.0f}" '
         f'role="img" aria-label="Схема {_esc(page.name)}">'
@@ -174,4 +136,11 @@ def page_svg(page: PageLayout, index: int) -> str:
 
 
 def build_previews(pages: list[PageLayout]) -> list[dict[str, str]]:
-    return [{"name": page.name, "svg": page_svg(page, i)} for i, page in enumerate(pages)]
+    link_map: dict[str, str] = {}
+    for page in pages:
+        if page.func_name:
+            link_map[page.func_name] = page.name
+    return [
+        {"name": page.name, "svg": page_svg(page, i, link_map)}
+        for i, page in enumerate(pages)
+    ]

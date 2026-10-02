@@ -70,6 +70,15 @@ function showPage(index) {
     tab.classList.toggle("active", i === index);
   });
   applyZoom();
+  previewEl.querySelectorAll(".linkable").forEach((node) => {
+    node.addEventListener("click", () => {
+      const target = node.getAttribute("data-page");
+      const next = currentPages.findIndex((page) => page.name === target);
+      if (next >= 0) {
+        showPage(next);
+      }
+    });
+  });
 }
 
 function renderPreview(pages) {
