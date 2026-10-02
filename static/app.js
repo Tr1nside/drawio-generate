@@ -7,15 +7,51 @@ const previewEl = document.getElementById("preview");
 const zoomLevelEl = document.getElementById("zoom-level");
 const zoomInBtn = document.getElementById("zoom-in");
 const zoomOutBtn = document.getElementById("zoom-out");
+const themeToggle = document.getElementById("theme-toggle");
 
 let currentXml = null;
 let currentPages = [];
 let zoom = 60;
 
+const EMPTY_STATE =
+  '<div class="preview-empty">' +
+  '<svg viewBox="0 0 24 24" aria-hidden="true">' +
+  '<rect x="8.5" y="2" width="7" height="5" rx="1.5"/>' +
+  '<rect x="2" y="17" width="7" height="5" rx="1.5"/>' +
+  '<rect x="15" y="17" width="7" height="5" rx="1.5"/>' +
+  '<path d="M12 7v3M5.5 17v-3.5h13V17" fill="none"/>' +
+  "</svg>" +
+  "<p>Здесь появится схема</p>" +
+  "<span>Вставьте код и нажмите «Построить блок-схему»</span>" +
+  "</div>";
+
+function resetPreview() {
+  currentPages = [];
+  tabsEl.innerHTML = "";
+  previewEl.innerHTML = EMPTY_STATE;
+}
+
 function setStatus(message, kind) {
   statusEl.textContent = message;
   statusEl.className = "status" + (kind ? " " + kind : "");
 }
+
+function currentTheme() {
+  return document.documentElement.getAttribute("data-theme") || "light";
+}
+
+function setTheme(theme) {
+  document.documentElement.setAttribute("data-theme", theme);
+  try {
+    localStorage.setItem("theme", theme);
+  } catch (e) {
+    /* хранилище недоступно — игнорируем */
+  }
+}
+
+themeToggle.addEventListener("click", () => {
+  setTheme(currentTheme() === "dark" ? "light" : "dark");
+});
 
 function applyZoom() {
   const svg = previewEl.querySelector("svg");
@@ -76,8 +112,7 @@ async function convert() {
 
     if (!response.ok) {
       setStatus(data.error || "Не удалось построить схему", "error");
-      previewEl.innerHTML = '<p class="preview-empty">Схема не построена.</p>';
-      tabsEl.innerHTML = "";
+      resetPreview();
       return;
     }
 
@@ -117,6 +152,13 @@ zoomInBtn.addEventListener("click", () => {
 zoomOutBtn.addEventListener("click", () => {
   zoom = Math.max(10, zoom - 10);
   applyZoom();
+});
+
+codeEl.addEventListener("keydown", (event) => {
+  if ((event.ctrlKey || event.metaKey) && event.key === "Enter") {
+    event.preventDefault();
+    convert();
+  }
 });
 
 codeEl.value =
