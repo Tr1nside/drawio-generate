@@ -130,14 +130,14 @@ pytest-совместимые функции.
 pytest
 
 # либо по отдельности, без pytest
-python3 test_parsers.py    # парсеры, реестр, автодетект, ошибки
-python3 test_layout.py     # инварианты укладки и XML (.drawio)
-python3 test_app.py        # HTTP-API Flask через test client
-python3 test_generate.py   # сквозная генерация и метрики (0 пересечений)
+python3 tests/test_parsers.py    # парсеры, реестр, автодетект, ошибки
+python3 tests/test_layout.py     # инварианты укладки и XML (.drawio)
+python3 tests/test_app.py        # HTTP-API Flask через test client
+python3 tests/test_generate.py   # сквозная генерация и метрики (0 пересечений)
 ```
 
-Тестовые примеры лежат в `fixtures/python/` и `fixtures/csharp/`, поэтому
-набор самодостаточен. Результаты генерации сохраняются в каталог `out/`.
+Тестовые примеры лежат в `tests/fixtures/python/` и `tests/fixtures/csharp/`,
+поэтому набор самодостаточен. Результаты генерации сохраняются в `tests/out/`.
 
 Зависимость для запуска через pytest — `requirements-dev.txt`.
 
@@ -145,28 +145,37 @@ python3 test_generate.py   # сквозная генерация и метрик
 
 ```
 drawio-gen/
-  app.py                 # Flask: GET "/", POST "/convert", /healthz
-  ir.py                  # язык-нейтральный IR
-  parsers/
-    base.py              # LanguageParser (ABC), ParseError
-    python_parser.py     # ast -> IR
-    csharp_parser.py     # tree-sitter -> IR
-    registry.py          # реестр парсеров (DIP)
-  parser.py              # shim обратной совместимости
-  layout.py              # IR -> координаты (+ объединение операторов)
-  optimizer.py           # объединение подряд идущих простых операторов
-  drawio.py              # координаты -> mxGraph XML
-  preview.py             # координаты -> SVG-предпросмотр
-  fixtures/python/       # примеры Python для тестов
-  fixtures/csharp/       # примеры C# для тестов
-  templates/index.html
-  static/app.js
-  static/style.css
-  test_parsers.py        # юнит-тесты парсеров и реестра
-  test_layout.py         # инварианты укладки и XML
-  test_app.py            # тесты HTTP-API
-  test_generate.py       # сквозная генерация и метрики
-  pytest.ini             # конфигурация pytest
+  app.py                    # точка входа: flask --app app / python3 app.py
+  parser.py                 # shim обратной совместимости (Python)
+  drawio_gen/               # основной пакет
+    ir.py                   # язык-нейтральный IR
+    optimizer.py            # объединение подряд идущих простых операторов
+    parsers/
+      base.py               # LanguageParser (ABC), ParseError
+      python_parser.py      # ast -> IR
+      csharp_parser.py      # tree-sitter -> IR
+      registry.py           # реестр парсеров (DIP)
+    layout/
+      geometry.py           # модели фигур, текст, геометрия
+      routing.py            # ортогональная маршрутизация рёбер
+      engine.py             # LayoutEngine (рекурсивная укладка)
+      page.py               # layout_page / layout_pages
+    render/
+      drawio.py             # координаты -> mxGraph XML
+      preview.py            # координаты -> SVG-предпросмотр
+    web/
+      app.py                # Flask: GET "/", POST "/convert", /healthz
+      templates/index.html
+      static/app.js
+      static/style.css
+  tests/
+    fixtures/python/        # примеры Python
+    fixtures/csharp/        # примеры C#
+    test_parsers.py         # юнит-тесты парсеров и реестра
+    test_layout.py          # инварианты укладки и XML
+    test_app.py             # тесты HTTP-API
+    test_generate.py        # сквозная генерация и метрики
+  pytest.ini                # конфигурация pytest
 ```
 
 Пайплайн: `parser.parse` → IR → `layout` (x/y) → XML/SVG → ответ фронтенду →

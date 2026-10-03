@@ -2,17 +2,20 @@
 
 Запуск::
 
-    python3 test_layout.py
+    python3 tests/test_layout.py
 """
 
 from __future__ import annotations
 
 import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import xml.etree.ElementTree as ET
 
-from drawio import build_mxfile
-from layout import layout_pages
-from parsers import get_parser
+from drawio_gen.render import build_mxfile
+from drawio_gen.layout import layout_pages
+from drawio_gen.parsers import get_parser
 
 PYTHON_CODE = (
     "def helper(a):\n"

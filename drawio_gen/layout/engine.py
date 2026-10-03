@@ -1,8 +1,6 @@
-"""Расчёт координат фигур (IR -> геометрия)."""
+"""Рекурсивный движок укладки одной страницы."""
 
-from dataclasses import dataclass, field
-
-from ir import (
+from ..ir import (
     Break,
     Continue,
     For,
@@ -11,173 +9,31 @@ from ir import (
     Input,
     Other,
     Output,
-    Page,
     Process,
     Return,
     Sequence,
     While,
 )
-
-GAP = 40
-PROC_W = 170
-PROC_H = 40
-RHOMBUS_W = 170
-RHOMBUS_H = 80
-HEX_W = 180
-HEX_H = 60
-TERM_W = 150
-TERM_H = 40
-BACK_MARGIN = 40
-LANE_W = 20
-J = 1
-LINE_H = 20
-CHAR_W = 7.2
-MAX_W = 360
-TEXT_PAD = 24
-
-
-@dataclass
-class Cell:
-    cid: int
-    kind: str
-    text: str
-    x: float
-    y: float
-    w: float
-    h: float
-    link_name: str = ""
-
-
-@dataclass
-class Conn:
-    cell: Cell
-    label: str = ""
-    side: str = "b"
-    waypoints: list = field(default_factory=list)
-
-
-@dataclass
-class Edge:
-    source: int
-    target: int
-    label: str = ""
-    waypoints: list = field(default_factory=list)
-    exit_side: str = "b"
-    entry_side: str = "t"
-
-
-@dataclass
-class Block:
-    entry: "Cell | None"
-    exits: list
-    w: float
-    h: float
-
-
-@dataclass
-class PageLayout:
-    name: str
-    cells: list
-    edges: list
-    width: float
-    height: float
-    func_name: "str | None" = None
-
-
-def _line_count(text: str) -> int:
-    return max(1, len(text.splitlines()))
-
-
-def _fit_width(text: str, base: float) -> float:
-    longest = max((len(line) for line in text.splitlines()), default=0)
-    return max(base, min(MAX_W, int(longest * CHAR_W) + TEXT_PAD))
-
-
-def wrap_lines(text: str, width: float) -> list:
-    max_chars = max(4, int(width / CHAR_W))
-    lines: list = []
-    for raw in (text or "").splitlines() or [""]:
-        words = raw.split()
-        if not words:
-            lines.append("")
-            continue
-        cur = ""
-        for word in words:
-            if not cur:
-                cur = word
-            elif len(cur) + 1 + len(word) <= max_chars:
-                cur += " " + word
-            else:
-                lines.append(cur)
-                cur = word
-        lines.append(cur)
-    return lines
-
-
-def anchor_point(cell: "Cell", side: str) -> tuple[float, float]:
-    """Точка на границе фигуры для заданной стороны.
-
-    Args:
-        cell: Геометрия фигуры.
-        side: Одна из сторон ``"l"``, ``"r"``, ``"t"``, ``"b"``.
-
-    Returns:
-        Координаты ``(x, y)`` точки привязки.
-    """
-    cx = cell.x + cell.w / 2
-    cy = cell.y + cell.h / 2
-    if side == "l":
-        return cell.x, cy
-    if side == "r":
-        return cell.x + cell.w, cy
-    if side == "t":
-        return cx, cell.y
-    return cx, cell.y + cell.h
-
-
-def _dedupe(points: list) -> list:
-    out: list = []
-    for point in points:
-        if not out or abs(point[0] - out[-1][0]) > 0.5 or abs(point[1] - out[-1][1]) > 0.5:
-            out.append(point)
-    return out
-
-
-def _orthogonalize(raw: list, start_side: str) -> list:
-    result = [raw[0]]
-    first = True
-    for q in raw[1:]:
-        p = result[-1]
-        if abs(p[0] - q[0]) < 0.5 or abs(p[1] - q[1]) < 0.5:
-            result.append(q)
-        else:
-            if first and start_side in ("l", "r"):
-                result.append((q[0], p[1]))
-            else:
-                result.append((p[0], q[1]))
-            result.append(q)
-        first = False
-    return _dedupe(result)
-
-
-def route_edge(edge: "Edge", cells: dict) -> list:
-    """Построить полную ортогональную полилинию ребра.
-
-    Используется и предпросмотром, и генератором ``.drawio`` — это
-    гарантирует одинаковый маршрут в обоих представлениях.
-
-    Args:
-        edge: Ребро с якорями и промежуточными точками.
-        cells: Отображение ``cid → Cell``.
-
-    Returns:
-        Список точек ``[(x, y), ...]`` от якоря источника до якоря цели.
-    """
-    source = cells[edge.source]
-    target = cells[edge.target]
-    start = anchor_point(source, edge.exit_side)
-    end = anchor_point(target, edge.entry_side)
-    return _orthogonalize([start, *edge.waypoints, end], edge.exit_side)
+from .geometry import (
+    BACK_MARGIN,
+    CHAR_W,
+    GAP,
+    HEX_H,
+    HEX_W,
+    J,
+    LANE_W,
+    LINE_H,
+    PROC_H,
+    PROC_W,
+    RHOMBUS_H,
+    RHOMBUS_W,
+    Cell,
+    Conn,
+    Edge,
+    Block,
+    fit_width,
+    wrap_lines,
+)
 
 
 class LayoutEngine:
@@ -223,21 +79,21 @@ class LayoutEngine:
 
     # --- измерение -------------------------------------------------------
     def simple_size(self, text: str) -> tuple[float, float]:
-        w = _fit_width(text, PROC_W)
+        w = fit_width(text, PROC_W)
         lines = wrap_lines(text, w - 16)
         h = max(PROC_H, len(lines) * LINE_H + 20)
         return w, h
 
     @staticmethod
     def shape_size(text: str, base_w: float, base_h: float, factor: float) -> tuple[float, float]:
-        w = _fit_width(text, base_w)
+        w = fit_width(text, base_w)
         inner = max(40.0, (w - 16) * factor)
         lines = wrap_lines(text, inner)
         h = max(base_h, len(lines) * LINE_H + 24)
         return w, h
 
     def condition_size(self, text: str) -> tuple[float, float]:
-        w = _fit_width(text, RHOMBUS_W)
+        w = fit_width(text, RHOMBUS_W)
         lines = wrap_lines(text, w * 0.5)
         longest = max((len(line) for line in lines), default=0)
         w = max(w, int(longest * CHAR_W / 0.6) + 16)
@@ -488,89 +344,3 @@ class LayoutEngine:
                 lanes.append((x, y0, y1))
                 return x
             k += 1
-
-
-def layout_page(page: Page) -> PageLayout:
-    """Уложить одну страницу IR в геометрию.
-
-    Args:
-        page: Страница IR.
-
-    Returns:
-        :class:`PageLayout` с размещёнными ячейками и рёбрами.
-    """
-    engine = LayoutEngine()
-    body_w, body_h = engine.measure(page.body)
-    content_w = max(body_w, TERM_W)
-
-    start = engine._add_cell(
-        "terminator", page.start_label, (content_w - TERM_W) / 2, 0.0, TERM_W, TERM_H
-    )
-
-    body_x = (content_w - body_w) / 2 if body_w else 0.0
-    body_y = TERM_H + GAP
-    block = engine.place(page.body, body_x, body_y) if page.body.items else None
-    body_bottom = body_y + body_h if body_h else TERM_H
-
-    merge = engine._add_junction(content_w / 2, body_bottom + GAP)
-    end = engine._add_cell(
-        "terminator", "Конец", (content_w - TERM_W) / 2, merge.y + J + GAP, TERM_W, TERM_H
-    )
-
-    if block is None or block.entry is None:
-        engine._add_edge(start.cid, merge.cid, exit_side="b", entry_side="t")
-    else:
-        engine._add_edge(start.cid, block.entry.cid, exit_side="b", entry_side="t")
-        for conn in block.exits:
-            engine._connect(conn, merge, "t")
-    engine._add_edge(merge.cid, end.cid, exit_side="b", entry_side="t")
-
-    width = max(content_w, TERM_W)
-    merge_cy = merge.y + J / 2
-    left_extent = 0.0
-    right_extent = width
-    for rid in engine.return_ids:
-        cell = next(c for c in engine.cells if c.cid == rid)
-        cy = cell.y + cell.h / 2
-        cx = cell.x + cell.w / 2
-        side = "r" if cx >= content_w / 2 else "l"
-        x_base = width if side == "r" else 0.0
-        lane = engine._alloc_return_lane(side, x_base, min(cy, merge_cy), max(cy, merge_cy))
-        engine._add_edge(
-            rid, merge.cid, "",
-            [(lane, cy), (lane, merge_cy)],
-            exit_side=side, entry_side=side,
-        )
-        if side == "l":
-            left_extent = min(left_extent, lane - LANE_W)
-        else:
-            right_extent = max(right_extent, lane + LANE_W)
-
-    offset = -left_extent if left_extent < 0 else 0.0
-    if offset:
-        for cell in engine.cells:
-            cell.x += offset
-        for edge in engine.edges:
-            edge.waypoints = [(x + offset, y) for x, y in edge.waypoints]
-    width = right_extent + offset
-
-    height = end.y + end.h
-    return PageLayout(page.name, engine.cells, engine.edges, width, height, page.func_name)
-
-
-def layout_pages(pages: list[Page]) -> list[PageLayout]:
-    """Уложить список страниц IR.
-
-    Перед укладкой соседние однотипные простые операторы объединяются
-    (:func:`optimizer.coalesce_pages`) для компактности схемы.
-
-    Args:
-        pages: Страницы IR.
-
-    Returns:
-        Список :class:`PageLayout` в том же порядке.
-    """
-    from optimizer import coalesce_pages
-
-    coalesce_pages(pages)
-    return [layout_page(page) for page in pages]

@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import ast
 
-from ir import (
+from ..ir import (
     Break,
     Continue,
     For,
@@ -24,7 +24,7 @@ from ir import (
     Sequence,
     While,
 )
-from parsers.base import LanguageParser, ParseError
+from .base import LanguageParser, ParseError
 
 
 class PythonParser(LanguageParser):

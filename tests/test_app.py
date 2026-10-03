@@ -2,7 +2,7 @@
 
 Запуск::
 
-    python3 test_app.py
+    python3 tests/test_app.py
 
 Тесты используют встроенный test client Flask и не поднимают реальный сервер.
 """
@@ -10,8 +10,11 @@
 from __future__ import annotations
 
 import sys
+from pathlib import Path
 
-import app as webapp
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from drawio_gen.web import app as webapp
 
 client = webapp.app.test_client()
 

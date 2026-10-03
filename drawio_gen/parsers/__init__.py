@@ -10,8 +10,8 @@
 
 from __future__ import annotations
 
-from parsers.base import LanguageParser, ParseError
-from parsers.registry import LanguageRegistry, registry
+from .base import LanguageParser, ParseError
+from .registry import LanguageRegistry, registry
 
 __all__ = [
     "LanguageParser",

@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 
-from ir import Page
+from ..ir import Page
 
 
 class ParseError(Exception):

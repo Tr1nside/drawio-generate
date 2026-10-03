@@ -32,15 +32,17 @@
 
 ```
 drawio-gen/
-  app.py            # Flask: GET "/" , POST "/convert" -> XML
-  parser.py         # ast -> IR
-  ir.py             # dataclass-узлы IR
-  layout.py         # IR -> координаты
-  drawio.py         # координаты -> mxGraph XML
-  requirements.txt  # flask
-  templates/index.html
-  static/app.js
-  static/style.css
+  app.py                    # Flask-точка входа
+  parser.py                 # shim обратной совместимости (Python)
+  drawio_gen/
+    ir.py                   # dataclass-узлы IR
+    optimizer.py            # объединение простых операторов
+    parsers/                # base / python / csharp / registry
+    layout/                 # geometry / routing / engine / page
+    render/                 # drawio (XML) / preview (SVG)
+    web/                    # Flask-приложение, templates, static
+  tests/                    # тесты и fixtures
+  requirements.txt          # flask, tree-sitter-language-pack
 ```
 
 Пайплайн: `ast.parse` → IR → layout (x/y) → XML → ответ фронтенду → скачивание `.drawio`.
@@ -51,21 +53,21 @@ drawio-gen/
 `FuncCall`, `Return`, `Other`. Линейные инструкции объединяются в `Sequence`,
 ветвления и циклы — вложенные узлы.
 
-### Парсер (`parser.py`)
+### Парсер (`drawio_gen/parsers/`)
 
 - Разбор через `ast.parse`, обход `ast.walk`/рекурсия по телу.
 - Каждая `def` разбирается отдельно и становится отдельной страницей.
 - На главной странице `def` не рисуется, только вызовы функций (Process-блок).
 - Для неподдерживаемых конструкций — `ast.get_source_segment` → узел `Other`.
 
-### Укладка (`layout.py`)
+### Укладка (`drawio_gen/layout/`)
 
 - Рекурсивный расчёт bbox поддерева.
 - Последовательность — вертикально; `if/else` — ветки влево/вправо;
   цикл — тело вниз + обратная дуга.
 - Исключение наложений за счёт учёта габаритов поддеревьев.
 
-### Генерация XML (`drawio.py`)
+### Генерация XML (`drawio_gen/render/drawio.py`)
 
 - Фигуры: terminator, process (прямоугольник), параллелограмм, ромб, шестиугольник.
 - Рёбра: `edgeStyle=orthogonalEdgeStyle`.
@@ -83,9 +85,9 @@ drawio-gen/
 ## Этапы работ
 
 1. Каркас Flask, страница с textarea + кнопка «Скачать .drawio».
-2. `ir.py` + `parser.py`: assign/input/print/if/elif/else/while/for → IR.
-3. `drawio.py`: генерация XML с нужными фигурами.
-4. `layout.py`: вертикальная укладка, ветки if/else, обратные дуги циклов.
+2. `drawio_gen/ir.py` + `drawio_gen/parsers/`: assign/input/print/if/elif/else/while/for → IR.
+3. `drawio_gen/render/drawio.py`: генерация XML с нужными фигурами.
+4. `drawio_gen/layout/`: вертикальная укладка, ветки if/else, обратные дуги циклов.
 5. Функции: по странице на `def`, старт `Начало <имя>`, вызовы как Process.
 6. `return` → дуги в единственный «Конец»; неподдерживаемое → блок «прочее».
 7. Проверка на `LAB3/17.py`, `LAB4/22.py`, `LAB5/66.py`.
@@ -101,10 +103,10 @@ drawio-gen/
 
 ### Архитектура (SOLID)
 
-- `parsers/base.py` — интерфейс `LanguageParser` и ошибка `ParseError`.
-- `parsers/python_parser.py`, `parsers/csharp_parser.py` — реализации.
-- `parsers/registry.py` — реестр; `app.py` зависит от абстракции (DIP).
-- Добавление языка не требует правок в `layout/drawio/preview` (OCP).
+- `drawio_gen/parsers/base.py` — интерфейс `LanguageParser` и ошибка `ParseError`.
+- `drawio_gen/parsers/python_parser.py`, `drawio_gen/parsers/csharp_parser.py` — реализации.
+- `drawio_gen/parsers/registry.py` — реестр; `app.py` зависит от абстракции (DIP).
+- Добавление языка не требует правок в `layout/render` (OCP).
 
 ### Сопоставление C# → IR
 

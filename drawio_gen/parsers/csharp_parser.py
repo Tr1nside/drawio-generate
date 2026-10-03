@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from functools import lru_cache
 
-from ir import (
+from ..ir import (
     Break,
     Continue,
     For,
@@ -25,7 +25,7 @@ from ir import (
     Sequence,
     While,
 )
-from parsers.base import LanguageParser, ParseError
+from .base import LanguageParser, ParseError
 
 #: Методы/функции, которые считаются операциями ввода/вывода .NET.
 _INPUT_MEMBERS = {"ReadLine", "Read"}

@@ -2,15 +2,18 @@
 
 Запуск::
 
-    python3 test_parsers.py
+    python3 tests/test_parsers.py
 """
 
 from __future__ import annotations
 
 import sys
+from pathlib import Path
 
-from ir import Break, Continue, For, FuncCall, If, Input, Other, Output, Return, While
-from parsers import (
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from drawio_gen.ir import Break, Continue, For, FuncCall, If, Input, Other, Output, Return, While
+from drawio_gen.parsers import (
     ParseError,
     available_languages,
     detect_language,
@@ -46,7 +49,7 @@ CSHARP_CODE = (
 
 
 def _flatten(node, acc):
-    from ir import Sequence
+    from drawio_gen.ir import Sequence
 
     items = node.items if isinstance(node, Sequence) else [node]
     for item in items:
@@ -112,7 +115,7 @@ def test_csharp_parser():
 
 
 def test_coalesce():
-    from optimizer import coalesce_pages
+    from drawio_gen.optimizer import coalesce_pages
 
     code = 'print("a")\nprint("b")\nprint("c")\nx = 1\ny = 2\n'
     pages = get_parser("python").parse(code)

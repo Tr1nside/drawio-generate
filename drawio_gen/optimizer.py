@@ -10,7 +10,7 @@
 
 from __future__ import annotations
 
-from ir import For, If, Input, Other, Output, Page, Process, Sequence, While
+from .ir import For, If, Input, Other, Output, Page, Process, Sequence, While
 
 #: Типы узлов, которые допускается объединять (одинаковые и подряд).
 _MERGEABLE = (Process, Input, Output, Other)

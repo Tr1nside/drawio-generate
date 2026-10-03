@@ -1,6 +1,6 @@
 """Отрисовка уложенных страниц в SVG для предпросмотра."""
 
-from layout import Cell, Edge, PageLayout, route_edge, wrap_lines
+from ..layout import Cell, Edge, PageLayout, route_edge, wrap_lines
 
 FONT_SIZE = 12
 LINE_HEIGHT = 20

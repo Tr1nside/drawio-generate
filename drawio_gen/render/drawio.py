@@ -1,6 +1,6 @@
 """Сериализация уложенных страниц в формат mxfile (drawio)."""
 
-from layout import PageLayout, route_edge
+from ..layout import PageLayout, route_edge
 
 NEUTRAL = "fillColor=#ffffff;strokeColor=#333333;"
 

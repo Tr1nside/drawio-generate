@@ -1,12 +1,14 @@
 """Проверка генерации .drawio на примерах Python и C#."""
 
 import sys
-import xml.etree.ElementTree as ET
 from pathlib import Path
 
-from drawio import build_mxfile
-from layout import layout_pages, route_edge
-from parsers import get_parser
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+import xml.etree.ElementTree as ET
+
+from drawio_gen.render import build_mxfile
+from drawio_gen.layout import layout_pages, route_edge
+from drawio_gen.parsers import get_parser
 
 FIX_DIR = Path(__file__).parent / "fixtures"
 OUT_DIR = Path(__file__).parent / "out"

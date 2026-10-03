@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import importlib.util
 
-from parsers.base import LanguageParser, ParseError
+from .base import LanguageParser, ParseError
 
 __all__ = ["LanguageRegistry", "registry", "ParseError"]
 
@@ -78,11 +78,11 @@ class LanguageRegistry:
 def _build_default_registry() -> LanguageRegistry:
     """Собрать реестр со стандартным набором парсеров."""
     reg = LanguageRegistry()
-    from parsers.python_parser import PythonParser
+    from .python_parser import PythonParser
 
     reg.register(PythonParser())
     if importlib.util.find_spec("tree_sitter_language_pack") is not None:
-        from parsers.csharp_parser import CSharpParser
+        from .csharp_parser import CSharpParser
 
         reg.register(CSharpParser())
     return reg
