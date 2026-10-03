@@ -195,6 +195,76 @@ def test_csharp_console_assignment():
     print("ok: C# ввод в присваивании")
 
 
+def test_csharp_switch_discard():
+    code = (
+        "using System;\n"
+        "class P {\n"
+        "    static void Main(int o) {\n"
+        "        switch (o) {\n"
+        "            case 1:\n"
+        "                Console.WriteLine(1);\n"
+        "                break;\n"
+        "            case _:\n"
+        "                Console.WriteLine(42);\n"
+        "                break;\n"
+        "        }\n"
+        "    }\n"
+        "}\n"
+    )
+    nodes = _flatten(get_parser("csharp").parse(code)[0].body, [])
+    outputs = [n for n in nodes if isinstance(n, Output)]
+    assert any("42" in n.text for n in outputs), [n.text for n in outputs]
+    ifs = [n for n in nodes if isinstance(n, If)]
+    assert any("is _" in n.condition for n in ifs), [n.condition for n in ifs]
+    print("ok: C# switch case _ (discard)")
+
+
+def test_csharp_top_level_statements():
+    code = (
+        "using System;\n"
+        "\n"
+        "int x = int.Parse(Console.ReadLine());\n"
+        "Console.WriteLine(x);\n"
+    )
+    pages = get_parser("csharp").parse(code)
+    assert pages[0].name == "main", [p.name for p in pages]
+    nodes = _flatten(pages[0].body, [])
+    assert any(isinstance(n, Input) for n in nodes), "нет Input"
+    assert any(isinstance(n, Output) for n in nodes), "нет Output"
+    print("ok: C# top-level statements")
+
+
+def test_csharp_switch_pattern_labels():
+    code = (
+        "using System;\n"
+        "class P {\n"
+        "    static void Main(int o) {\n"
+        "        switch (o) {\n"
+        "            case 0:\n"
+        "                Console.WriteLine(0);\n"
+        "                break;\n"
+        "            case >= 5:\n"
+        "                Console.WriteLine(5);\n"
+        "                break;\n"
+        "            case int n when n > 0:\n"
+        "                Console.WriteLine(n);\n"
+        "                break;\n"
+        "        }\n"
+        "    }\n"
+        "}\n"
+    )
+    ifs = [
+        n
+        for n in _flatten(get_parser("csharp").parse(code)[0].body, [])
+        if isinstance(n, If)
+    ]
+    conditions = [n.condition for n in ifs]
+    assert "o == 0" in conditions, conditions
+    assert any("is >= 5" in c for c in conditions), conditions
+    assert any("is int n when n > 0" in c for c in conditions), conditions
+    print("ok: C# switch labels для паттернов")
+
+
 def test_convert_language_type():
     import app as webapp
 
@@ -216,6 +286,9 @@ def main() -> int:
         test_csharp_parser,
         test_csharp_switch_patterns,
         test_csharp_console_assignment,
+        test_csharp_switch_discard,
+        test_csharp_top_level_statements,
+        test_csharp_switch_pattern_labels,
         test_coalesce,
         test_parse_errors,
         test_convert_language_type,

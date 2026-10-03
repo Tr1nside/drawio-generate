@@ -107,6 +107,11 @@ def _first_error(node):
     return None
 
 
+def _is_pattern(node) -> bool:
+    """Является ли узел case-паттерном (``*_pattern`` или ``discard``)."""
+    return node.type.endswith("_pattern") or node.type == "discard"
+
+
 class _Walker:
     """Рекурсивный обход дерева C# и построение IR."""
 
@@ -125,7 +130,15 @@ class _Walker:
         methods: list = []
         self._collect_methods(self._tree.root_node, methods)
 
-        main_page: Page | None = None
+        top_stmts: list = []
+        for child in self._tree.root_node.named_children:
+            if child.type == "global_statement":
+                for inner in child.named_children:
+                    top_stmts.extend(self._statement(inner))
+
+        main_page: Page | None = (
+            Page("main", Sequence(top_stmts), "Начало") if top_stmts else None
+        )
         others: list[Page] = []
         used = {"main"}
         for method in methods:
@@ -268,7 +281,7 @@ class _Walker:
             if section.type != "switch_section":
                 continue
             is_default = any(c.type == "default" for c in section.children)
-            patterns = [c for c in section.named_children if c.type.endswith("_pattern")]
+            patterns = [c for c in section.named_children if _is_pattern(c)]
             guard = next(
                 (c for c in section.named_children if c.type == "when_clause"), None
             )
@@ -277,7 +290,7 @@ class _Walker:
             stmts: list = []
             terminated = False
             for child in section.named_children:
-                if child.type == "when_clause" or child.type.endswith("_pattern"):
+                if child.type == "when_clause" or _is_pattern(child):
                     continue
                 if child.type == "break_statement":
                     terminated = True
@@ -309,7 +322,11 @@ class _Walker:
         return list(else_body.items)
 
     def _case_condition(self, value: str, pattern, guard) -> str:
-        condition = f"{value} == {self.text(pattern)}"
+        pattern_text = self.text(pattern)
+        if pattern.type == "constant_pattern":
+            condition = f"{value} == {pattern_text}"
+        else:
+            condition = f"{value} is {pattern_text}"
         if guard is not None:
             guard_text = self.text(guard)
             if guard_text.startswith("when"):
