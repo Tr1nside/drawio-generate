@@ -92,8 +92,9 @@ def convert():
     started = time.perf_counter()
     data = request.get_json(silent=True) or {}
     code = data.get("code") or request.form.get("code", "")
-    language = (data.get("language") or request.form.get("language") or "auto").strip()
-    if not code.strip():
+    raw_language = data.get("language") or request.form.get("language") or "auto"
+    language = str(raw_language).strip()
+    if not isinstance(code, str) or not code.strip():
         logger.warning("convert: пустой код")
         return jsonify(error="Пустой код"), 400
     try:

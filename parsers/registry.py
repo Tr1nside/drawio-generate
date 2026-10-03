@@ -8,6 +8,8 @@
 
 from __future__ import annotations
 
+import importlib.util
+
 from parsers.base import LanguageParser, ParseError
 
 __all__ = ["LanguageRegistry", "registry", "ParseError"]
@@ -79,12 +81,10 @@ def _build_default_registry() -> LanguageRegistry:
     from parsers.python_parser import PythonParser
 
     reg.register(PythonParser())
-    try:
+    if importlib.util.find_spec("tree_sitter_language_pack") is not None:
         from parsers.csharp_parser import CSharpParser
 
         reg.register(CSharpParser())
-    except ImportError:  # pragma: no cover - зависимость tree-sitter необязательна
-        pass
     return reg
 
 

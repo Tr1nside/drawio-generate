@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import sys
 
-from ir import Break, Continue, For, FuncCall, If, Input, Output, Return, While
+from ir import Break, Continue, For, FuncCall, If, Input, Other, Output, Return, While
 from parsers import (
     ParseError,
     available_languages,
@@ -142,6 +142,68 @@ def test_parse_errors():
     print("ok: ошибки разбора с позицией")
 
 
+def test_csharp_switch_patterns():
+    code = (
+        "using System;\n"
+        "class P {\n"
+        "    static void Main(object o) {\n"
+        "        int x = 1;\n"
+        "        switch (o) {\n"
+        "            case int n:\n"
+        "                Console.WriteLine(n);\n"
+        "                break;\n"
+        "            default:\n"
+        "                Console.WriteLine(0);\n"
+        "                break;\n"
+        "        }\n"
+        "        switch (x) {\n"
+        "            case 1:\n"
+        "            case 2:\n"
+        "                Console.WriteLine(x);\n"
+        "                break;\n"
+        "        }\n"
+        "    }\n"
+        "}\n"
+    )
+    nodes = _flatten(get_parser("csharp").parse(code)[0].body, [])
+    ifs = [n for n in nodes if isinstance(n, If)]
+    outputs = [n for n in nodes if isinstance(n, Output)]
+    assert sum(1 for n in outputs if "WriteLine" in n.text) >= 3, [o.text for o in outputs]
+    assert any("int n" in n.condition for n in ifs), [n.condition for n in ifs]
+    conditions = [n.condition for n in ifs]
+    assert "x == 1" in conditions and "x == 2" in conditions, conditions
+    assert not any(isinstance(n, Other) for n in nodes), "pattern не должен попадать как Other"
+    print("ok: C# switch (pattern/default/fall-through)")
+
+
+def test_csharp_console_assignment():
+    code = (
+        "using System;\n"
+        "class P {\n"
+        "    static void Main() {\n"
+        "        string s;\n"
+        "        s = Console.ReadLine();\n"
+        "        Console.WriteLine(s);\n"
+        "    }\n"
+        "}\n"
+    )
+    nodes = _flatten(get_parser("csharp").parse(code)[0].body, [])
+    assert any(isinstance(n, Input) and "ReadLine" in n.text for n in nodes), nodes
+    print("ok: C# ввод в присваивании")
+
+
+def test_convert_language_type():
+    import app as webapp
+
+    client = webapp.app.test_client()
+    response = client.post(
+        "/convert",
+        json={"code": "x = 1\n", "language": 123},
+    )
+    assert response.status_code != 500, response.status_code
+    print("ok: нестроковый language не роняет сервер")
+
+
 def main() -> int:
     tests = [
         test_registry,
@@ -149,8 +211,11 @@ def main() -> int:
         test_unknown_language,
         test_python_parser,
         test_csharp_parser,
+        test_csharp_switch_patterns,
+        test_csharp_console_assignment,
         test_coalesce,
         test_parse_errors,
+        test_convert_language_type,
     ]
     for test in tests:
         test()

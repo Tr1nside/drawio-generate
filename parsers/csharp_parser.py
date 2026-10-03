@@ -263,29 +263,59 @@ class _Walker:
 
         cases: list[tuple[str, Sequence]] = []
         default_body: Sequence | None = None
+        pending: list[str] = []
         for section in body.named_children:
             if section.type != "switch_section":
                 continue
-            pattern = next(
-                (c for c in section.named_children if c.type == "constant_pattern"), None
+            is_default = any(c.type == "default" for c in section.children)
+            patterns = [c for c in section.named_children if c.type.endswith("_pattern")]
+            guard = next(
+                (c for c in section.named_children if c.type == "when_clause"), None
             )
+            labels = [self._case_condition(value, pat, guard) for pat in patterns]
+
             stmts: list = []
+            terminated = False
             for child in section.named_children:
-                if child.type in ("constant_pattern", "break_statement"):
+                if child.type == "when_clause" or child.type.endswith("_pattern"):
+                    continue
+                if child.type == "break_statement":
+                    terminated = True
                     continue
                 stmts.extend(self._statement(child))
-            if pattern is None:
+
+            if is_default:
                 default_body = Sequence(stmts)
-            else:
-                cases.append((self.text(pattern), Sequence(stmts)))
+                for label in pending:
+                    cases.append((label, Sequence(stmts)))
+                pending.clear()
+                continue
+            if labels and not stmts and not terminated:
+                pending.extend(labels)
+                continue
+            for label in (*pending, *labels):
+                cases.append((label, Sequence(stmts)))
+            pending.clear()
+
+        for label in pending:
+            cases.append((label, Sequence([])))
 
         if not cases:
             return list(default_body.items) if default_body else [Other(self.text(node))]
 
         else_body = default_body
-        for value_text, case_body in reversed(cases):
-            else_body = Sequence([If(f"{value} == {value_text}", case_body, else_body)])
+        for condition, case_body in reversed(cases):
+            else_body = Sequence([If(condition, case_body, else_body)])
         return list(else_body.items)
+
+    def _case_condition(self, value: str, pattern, guard) -> str:
+        condition = f"{value} == {self.text(pattern)}"
+        if guard is not None:
+            guard_text = self.text(guard)
+            if guard_text.startswith("when"):
+                guard_text = guard_text[len("when"):].strip()
+            condition = f"{condition} when {guard_text}"
+        return condition
 
     def _st_try(self, node) -> list:
         nodes: list = list(self._statements(node.child_by_field_name("body")))
@@ -305,8 +335,15 @@ class _Walker:
         return [Process(self.text(node))]
 
     def _st_expr(self, node) -> list:
-        if node.named_child_count == 1 and node.named_children[0].type == "invocation_expression":
-            return [self._invocation(node.named_children[0])]
+        if node.named_child_count == 1:
+            child = node.named_children[0]
+            if child.type == "invocation_expression":
+                return [self._invocation(child)]
+            if child.type == "assignment_expression":
+                if self._contains_console(child, _INPUT_MEMBERS):
+                    return [Input(self.text(node))]
+                if self._contains_console(child, _OUTPUT_MEMBERS):
+                    return [Output(self.text(node))]
         return [Process(self.text(node))]
 
     def _invocation(self, node):
