@@ -111,6 +111,20 @@ def test_csharp_parser():
     print("ok: C#-парсер")
 
 
+def test_coalesce():
+    from optimizer import coalesce_pages
+
+    code = 'print("a")\nprint("b")\nprint("c")\nx = 1\ny = 2\n'
+    pages = get_parser("python").parse(code)
+    coalesce_pages(pages)
+    items = pages[0].body.items
+    outputs = [n for n in items if isinstance(n, Output)]
+    processes = [n for n in items if type(n).__name__ == "Process"]
+    assert len(outputs) == 1 and outputs[0].text.count("\n") == 2, outputs
+    assert len(processes) == 1 and processes[0].text.count("\n") == 1, processes
+    print("ok: объединение простых операторов")
+
+
 def test_parse_errors():
     try:
         get_parser("python").parse("def (")
@@ -135,6 +149,7 @@ def main() -> int:
         test_unknown_language,
         test_python_parser,
         test_csharp_parser,
+        test_coalesce,
         test_parse_errors,
     ]
     for test in tests:

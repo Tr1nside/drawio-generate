@@ -561,10 +561,16 @@ def layout_page(page: Page) -> PageLayout:
 def layout_pages(pages: list[Page]) -> list[PageLayout]:
     """Уложить список страниц IR.
 
+    Перед укладкой соседние однотипные простые операторы объединяются
+    (:func:`optimizer.coalesce_pages`) для компактности схемы.
+
     Args:
         pages: Страницы IR.
 
     Returns:
         Список :class:`PageLayout` в том же порядке.
     """
+    from optimizer import coalesce_pages
+
+    coalesce_pages(pages)
     return [layout_page(page) for page in pages]
