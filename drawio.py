@@ -129,6 +129,14 @@ def _diagram_xml(page: PageLayout, index: int, link_map: dict) -> str:
 
 
 def build_mxfile(pages: list[PageLayout]) -> str:
+    """Сериализовать уложенные страницы в XML формата mxfile.
+
+    Args:
+        pages: Список уложенных страниц.
+
+    Returns:
+        Строка XML, готовая к сохранению в файл ``.drawio``.
+    """
     link_map: dict[str, int] = {}
     for i, page in enumerate(pages):
         if page.func_name:

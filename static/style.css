@@ -215,6 +215,49 @@ code {
   display: none;
 }
 
+.header-controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 0 0 auto;
+}
+
+.language {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.language__label {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.language select {
+  appearance: none;
+  padding: 8px 30px 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--panel)
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%235b6675' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E")
+    no-repeat right 10px center;
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color 0.2s ease;
+}
+
+.language select:hover {
+  border-color: var(--border-strong);
+}
+
+.language select:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
 /* Layout --------------------------------------------------------------- */
 main {
   flex: 1;

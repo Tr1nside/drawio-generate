@@ -120,6 +120,14 @@ def page_svg(page: PageLayout, index: int, link_map: dict) -> str:
 
 
 def build_previews(pages: list[PageLayout]) -> list[dict[str, str]]:
+    """Собрать SVG-предпросмотр для каждой страницы.
+
+    Args:
+        pages: Список уложенных страниц.
+
+    Returns:
+        Список словарей ``{"name": ..., "svg": ...}``.
+    """
     link_map: dict[str, str] = {}
     for page in pages:
         if page.func_name:

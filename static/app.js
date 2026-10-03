@@ -8,10 +8,55 @@ const zoomLevelEl = document.getElementById("zoom-level");
 const zoomInBtn = document.getElementById("zoom-in");
 const zoomOutBtn = document.getElementById("zoom-out");
 const themeToggle = document.getElementById("theme-toggle");
+const languageEl = document.getElementById("language");
+
+const SAMPLES = {
+  python:
+    'def main() -> None:\n' +
+    '    x = float(input("x = "))\n' +
+    '    if x > 0:\n' +
+    '        print("positive")\n' +
+    '    else:\n' +
+    '        print("non-positive")\n' +
+    '\n' +
+    'if __name__ == "__main__":\n' +
+    '    main()\n',
+  csharp:
+    "using System;\n" +
+    "\n" +
+    "class Program\n" +
+    "{\n" +
+    "    static void Main(string[] args)\n" +
+    "    {\n" +
+    '        int x = int.Parse(Console.ReadLine());\n' +
+    "        if (x > 0)\n" +
+    "        {\n" +
+    '            Console.WriteLine("positive");\n' +
+    "        }\n" +
+    "        else\n" +
+    "        {\n" +
+    '            Console.WriteLine("non-positive");\n' +
+    "        }\n" +
+    "    }\n" +
+    "}\n",
+};
 
 let currentXml = null;
 let currentPages = [];
 let zoom = 60;
+let pristine = true;
+
+function sampleFor(language) {
+  return SAMPLES[language] || SAMPLES.python;
+}
+
+function storeLanguage(language) {
+  try {
+    localStorage.setItem("language", language);
+  } catch (e) {
+    /* хранилище недоступно — игнорируем */
+  }
+}
 
 const EMPTY_STATE =
   '<div class="preview-empty">' +
@@ -102,7 +147,7 @@ function renderPreview(pages) {
 async function convert() {
   const code = codeEl.value;
   if (!code.trim()) {
-    setStatus("Введите код на Python", "error");
+    setStatus("Введите код программы", "error");
     return;
   }
 
@@ -115,7 +160,7 @@ async function convert() {
     const response = await fetch("/convert", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ code }),
+      body: JSON.stringify({ code, language: languageEl.value }),
     });
     const data = await response.json();
 
@@ -128,7 +173,7 @@ async function convert() {
     currentXml = data.xml;
     renderPreview(data.pages || []);
     downloadBtn.disabled = false;
-    setStatus("Готово. Проверьте схему и скачайте файл.", "ok");
+    setStatus(`Готово (${data.language_name || "код"}). Проверьте схему и скачайте файл.`, "ok");
   } catch (error) {
     setStatus("Ошибка сети: " + error.message, "error");
   } finally {
@@ -170,13 +215,27 @@ codeEl.addEventListener("keydown", (event) => {
   }
 });
 
-codeEl.value =
-  'def main() -> None:\n' +
-  '    x = float(input("x = "))\n' +
-  '    if x > 0:\n' +
-  '        print("positive")\n' +
-  '    else:\n' +
-  '        print("non-positive")\n' +
-  '\n' +
-  'if __name__ == "__main__":\n' +
-  '    main()\n';
+codeEl.addEventListener("input", () => {
+  pristine = false;
+});
+
+languageEl.addEventListener("change", () => {
+  storeLanguage(languageEl.value);
+  if (pristine) {
+    codeEl.value = sampleFor(languageEl.value === "csharp" ? "csharp" : "python");
+    pristine = true;
+  }
+});
+
+(function init() {
+  let saved = "auto";
+  try {
+    saved = localStorage.getItem("language") || "auto";
+  } catch (e) {
+    /* игнорируем */
+  }
+  if ([...languageEl.options].some((option) => option.value === saved)) {
+    languageEl.value = saved;
+  }
+  codeEl.value = sampleFor(saved === "csharp" ? "csharp" : "python");
+})();

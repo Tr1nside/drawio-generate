@@ -1,14 +1,16 @@
-# Генератор блок-схем из Python-кода (drawio)
+# Генератор блок-схем из кода (drawio)
 
-Веб-приложение: пользователь вставляет Python-код, на выходе получает файл `.drawio`
-с блок-схемой. Один файл содержит несколько страниц (diagram): `main` и по одной на
-каждую функцию (`def`).
+Веб-приложение: пользователь вставляет код на **Python** или **C#**, на выходе
+получает файл `.drawio` с блок-схемой. Один файл содержит несколько страниц
+(diagram): `main` и по одной на каждую функцию/метод.
 
 ## Стек
 
-- **Бэкенд:** Flask + стандартный модуль `ast` (парсинг Python).
+- **Бэкенд:** Flask; Python — стандартный `ast`; C# — `tree-sitter`
+  (пакет `tree-sitter-language-pack`). Парсеры скрыты за общим интерфейсом
+  `parsers.LanguageParser` (см. раздел «Поддержка C#»).
 - **Фронтенд:** чистые HTML/CSS/JS, без сборки и тяжёлых зависимостей.
-- Единственная зависимость: `flask`.
+- Зависимости: `flask`, `tree-sitter-language-pack`.
 
 ## Сопоставление конструкций Python → фигуры drawio
 
@@ -94,3 +96,34 @@ drawio-gen/
 - Ровно один Terminator начала и один конца на каждой странице.
 - Фигуры соответствуют таблице сопоставления.
 - Код с функциями даёт отдельную страницу на каждую функцию.
+
+## Поддержка C#
+
+### Архитектура (SOLID)
+
+- `parsers/base.py` — интерфейс `LanguageParser` и ошибка `ParseError`.
+- `parsers/python_parser.py`, `parsers/csharp_parser.py` — реализации.
+- `parsers/registry.py` — реестр; `app.py` зависит от абстракции (DIP).
+- Добавление языка не требует правок в `layout/drawio/preview` (OCP).
+
+### Сопоставление C# → IR
+
+| C#                                   | IR                                       |
+|--------------------------------------|------------------------------------------|
+| `namespace`/`class`/`using`/атрибуты | пропускаются, обход вложенных методов    |
+| метод                                | `Page`; `Main` → страница `main`          |
+| `Console.ReadLine`/`Read`            | `Input`                                  |
+| `Console.WriteLine`/`Write`          | `Output`                                 |
+| `if / else if / else`                | `If` (цепочка через `else_body`)          |
+| `switch/case/default`                | цепочка `If` (`x == value`)               |
+| `while` / `do-while`                 | `While` (ромб)                            |
+| `for` / `foreach`                    | `For` (шестиугольник)                     |
+| `return`/`break`/`continue`          | `Return`/`Break`/`Continue`               |
+| `try/catch/finally`                  | тело + `Other` для catch/finally          |
+| `throw`                              | `Other`                                   |
+| прочее                               | `Other`                                   |
+
+### Автодетект и интерфейс
+
+- `LanguageRegistry.detect` выбирает язык по эвристикам (fallback — Python).
+- В UI — селектор «Авто / Python / C#», выбор хранится в `localStorage`.

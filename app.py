@@ -1,4 +1,4 @@
-"""Flask-приложение: Python-код -> файл .drawio."""
+"""Flask-приложение: исходный код (Python/C#) → файл .drawio."""
 
 import argparse
 import logging
@@ -10,7 +10,7 @@ from flask import Flask, jsonify, render_template, request
 
 from drawio import build_mxfile
 from layout import layout_pages
-from parser import parse_pages
+from parsers import ParseError, available_languages, detect_language, get_parser
 from preview import build_previews
 
 logger = logging.getLogger("drawio")
@@ -71,7 +71,7 @@ def _server_error(error):
 
 @app.get("/")
 def index():
-    return render_template("index.html")
+    return render_template("index.html", languages=available_languages())
 
 
 @app.get("/healthz")
@@ -81,34 +81,54 @@ def healthz():
 
 @app.post("/convert")
 def convert():
+    """Построить блок-схему из исходного кода.
+
+    Ожидает JSON с полями ``code`` и (опционально) ``language``.
+
+    Returns:
+        JSON с полями ``xml``, ``pages``, ``language``, ``language_name``
+        либо ``error`` при ошибке разбора.
+    """
     started = time.perf_counter()
     data = request.get_json(silent=True) or {}
     code = data.get("code") or request.form.get("code", "")
+    language = (data.get("language") or request.form.get("language") or "auto").strip()
     if not code.strip():
         logger.warning("convert: пустой код")
         return jsonify(error="Пустой код"), 400
     try:
-        pages = parse_pages(code)
+        parser = detect_language(code) if language in ("", "auto") else get_parser(language)
+        pages = parser.parse(code)
         layouts = layout_pages(pages)
         xml = build_mxfile(layouts)
         previews = build_previews(layouts)
-    except SyntaxError as exc:
-        line = f" (строка {exc.lineno})" if exc.lineno else ""
-        logger.warning("convert: синтаксическая ошибка%s: %s", line, exc.msg)
-        return jsonify(error=f"Синтаксическая ошибка: {exc.msg}{line}"), 400
+    except ParseError as exc:
+        logger.warning("convert: ошибка разбора (%s): %s", language, exc)
+        payload = {"error": str(exc)}
+        if exc.line is not None:
+            payload["line"] = exc.line
+        if exc.column is not None:
+            payload["column"] = exc.column
+        return jsonify(payload), 400
     except Exception as exc:  # noqa: BLE001
         logger.exception("convert: ошибка обработки кода")
         return jsonify(error=f"Ошибка обработки: {exc}"), 400
     elapsed = (time.perf_counter() - started) * 1000
     logger.info(
-        "convert: ok — %d строк, %d страниц (%s), XML %d Б, %.1f ms",
+        "convert: ok [%s] — %d строк, %d страниц (%s), XML %d Б, %.1f ms",
+        parser.id,
         len(code.splitlines()),
         len(layouts),
         ", ".join(page.name for page in pages),
         len(xml),
         elapsed,
     )
-    return jsonify(xml=xml, pages=previews)
+    return jsonify(
+        xml=xml,
+        pages=previews,
+        language=parser.id,
+        language_name=parser.display_name,
+    )
 
 
 def _proxy_warning() -> str | None:

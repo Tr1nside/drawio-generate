@@ -1,4 +1,4 @@
-"""Проверка генерации .drawio на тестовых файлах LAB3/4/5."""
+"""Проверка генерации .drawio на примерах Python и C#."""
 
 import sys
 import xml.etree.ElementTree as ET
@@ -6,29 +6,55 @@ from pathlib import Path
 
 from drawio import build_mxfile
 from layout import layout_pages, route_edge
-from parser import parse_pages
+from parsers import get_parser
 
 CS_DIR = Path("/Users/chertik/Documents/Projects/CS")
+FIX_DIR = Path(__file__).parent / "fixtures"
 OUT_DIR = Path(__file__).parent / "out"
 
 CASES = {
     "LAB3/17.py": {
+        "language": "python",
         "pages": {"main", "main_2", "_input_data", "_check_triangle", "_check_equilateralism"},
         "rhombus": 3,
         "io": 9,
         "max_crossings": 0,
     },
     "LAB4/22.py": {
+        "language": "python",
         "pages": {"main"},
         "rhombus": 2,
         "io": 2,
         "max_crossings": 0,
     },
     "LAB5/66.py": {
+        "language": "python",
         "pages": {"main"},
         "rhombus": 1,
         "hexagon": 1,
         "io": 2,
+        "max_crossings": 0,
+    },
+    "csharp/basic.cs": {
+        "language": "csharp",
+        "pages": {"main"},
+        "rhombus": 2,
+        "io": 5,
+        "max_crossings": 0,
+    },
+    "csharp/loops.cs": {
+        "language": "csharp",
+        "pages": {"main"},
+        "rhombus": 4,
+        "hexagon": 2,
+        "io": 3,
+        "max_crossings": 0,
+    },
+    "csharp/switch_try.cs": {
+        "language": "csharp",
+        "pages": {"main", "Divide"},
+        "rhombus": 3,
+        "io": 5,
         "max_crossings": 0,
     },
 }
@@ -147,10 +173,13 @@ def main():
     failed = False
 
     for rel, expected in CASES.items():
-        source = (CS_DIR / rel).read_text(encoding="utf-8")
-        print(f"\n=== {rel} ===")
+        language = expected["language"]
+        base = CS_DIR if language == "python" else FIX_DIR
+        source = (base / rel).read_text(encoding="utf-8")
+        print(f"\n=== {rel} [{language}] ===")
         try:
-            layouts = layout_pages(parse_pages(source))
+            pages = get_parser(language).parse(source)
+            layouts = layout_pages(pages)
             xml = build_mxfile(layouts)
             ET.fromstring(xml)
         except Exception as exc:  # noqa: BLE001
@@ -158,7 +187,7 @@ def main():
             failed = True
             continue
 
-        out = OUT_DIR / (Path(rel).name.replace(".py", "") + ".drawio")
+        out = OUT_DIR / (Path(rel).name.replace(".py", "").replace(".cs", "") + ".drawio")
         out.write_text(xml, encoding="utf-8")
 
         diagrams = analyse(xml)

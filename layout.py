@@ -114,7 +114,16 @@ def wrap_lines(text: str, width: float) -> list:
     return lines
 
 
-def anchor_point(cell: Cell, side: str) -> tuple[float, float]:
+def anchor_point(cell: "Cell", side: str) -> tuple[float, float]:
+    """Точка на границе фигуры для заданной стороны.
+
+    Args:
+        cell: Геометрия фигуры.
+        side: Одна из сторон ``"l"``, ``"r"``, ``"t"``, ``"b"``.
+
+    Returns:
+        Координаты ``(x, y)`` точки привязки.
+    """
     cx = cell.x + cell.w / 2
     cy = cell.y + cell.h / 2
     if side == "l":
@@ -151,8 +160,19 @@ def _orthogonalize(raw: list, start_side: str) -> list:
     return _dedupe(result)
 
 
-def route_edge(edge: Edge, cells: dict) -> list:
-    """Полная ортогональная полилиния ребра (от якоря до якоря)."""
+def route_edge(edge: "Edge", cells: dict) -> list:
+    """Построить полную ортогональную полилинию ребра.
+
+    Используется и предпросмотром, и генератором ``.drawio`` — это
+    гарантирует одинаковый маршрут в обоих представлениях.
+
+    Args:
+        edge: Ребро с якорями и промежуточными точками.
+        cells: Отображение ``cid → Cell``.
+
+    Returns:
+        Список точек ``[(x, y), ...]`` от якоря источника до якоря цели.
+    """
     source = cells[edge.source]
     target = cells[edge.target]
     start = anchor_point(source, edge.exit_side)
@@ -161,6 +181,12 @@ def route_edge(edge: Edge, cells: dict) -> list:
 
 
 class LayoutEngine:
+    """Рекурсивный расчёт геометрии одной страницы.
+
+    Содержит изменяемое состояние: размещённые ячейки, рёбра, идентификаторы
+    возвратов и реестр дорожек. Для каждой страницы создаётся новый движок.
+    """
+
     def __init__(self) -> None:
         self.cells: list[Cell] = []
         self.edges: list[Edge] = []
@@ -465,6 +491,14 @@ class LayoutEngine:
 
 
 def layout_page(page: Page) -> PageLayout:
+    """Уложить одну страницу IR в геометрию.
+
+    Args:
+        page: Страница IR.
+
+    Returns:
+        :class:`PageLayout` с размещёнными ячейками и рёбрами.
+    """
     engine = LayoutEngine()
     body_w, body_h = engine.measure(page.body)
     content_w = max(body_w, TERM_W)
@@ -525,4 +559,12 @@ def layout_page(page: Page) -> PageLayout:
 
 
 def layout_pages(pages: list[Page]) -> list[PageLayout]:
+    """Уложить список страниц IR.
+
+    Args:
+        pages: Страницы IR.
+
+    Returns:
+        Список :class:`PageLayout` в том же порядке.
+    """
     return [layout_page(page) for page in pages]
