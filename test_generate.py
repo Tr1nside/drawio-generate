@@ -8,26 +8,25 @@ from drawio import build_mxfile
 from layout import layout_pages, route_edge
 from parsers import get_parser
 
-CS_DIR = Path("/Users/chertik/Documents/Projects/CS")
 FIX_DIR = Path(__file__).parent / "fixtures"
 OUT_DIR = Path(__file__).parent / "out"
 
 CASES = {
-    "LAB3/17.py": {
+    "python/LAB3/17.py": {
         "language": "python",
         "pages": {"main", "main_2", "_input_data", "_check_triangle", "_check_equilateralism"},
         "rhombus": 3,
         "io": 7,
         "max_crossings": 0,
     },
-    "LAB4/22.py": {
+    "python/LAB4/22.py": {
         "language": "python",
         "pages": {"main"},
         "rhombus": 2,
         "io": 2,
         "max_crossings": 0,
     },
-    "LAB5/66.py": {
+    "python/LAB5/66.py": {
         "language": "python",
         "pages": {"main"},
         "rhombus": 1,
@@ -174,8 +173,7 @@ def main():
 
     for rel, expected in CASES.items():
         language = expected["language"]
-        base = CS_DIR if language == "python" else FIX_DIR
-        source = (base / rel).read_text(encoding="utf-8")
+        source = (FIX_DIR / rel).read_text(encoding="utf-8")
         print(f"\n=== {rel} [{language}] ===")
         try:
             pages = get_parser(language).parse(source)
@@ -231,6 +229,11 @@ def main():
 
     print("\nИТОГ:", "ОШИБКИ" if failed else "всё успешно")
     return 1 if failed else 0
+
+
+def test_generation_cases() -> None:
+    """Pytest-обёртка: полный прогон генерации и проверок метрик."""
+    assert main() == 0
 
 
 if __name__ == "__main__":

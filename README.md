@@ -122,12 +122,24 @@ flask --app app run --debug
 
 ## Проверка
 
+Тесты написаны как обычные скрипты (запускаются без зависимостей) и как
+pytest-совместимые функции.
+
 ```bash
-python3 test_parsers.py    # юнит-тесты парсеров и автодетекта
-python3 test_generate.py   # генерация и метрики (0 пересечений/наложений)
+# всё сразу (если установлен pytest)
+pytest
+
+# либо по отдельности, без pytest
+python3 test_parsers.py    # парсеры, реестр, автодетект, ошибки
+python3 test_layout.py     # инварианты укладки и XML (.drawio)
+python3 test_app.py        # HTTP-API Flask через test client
+python3 test_generate.py   # сквозная генерация и метрики (0 пересечений)
 ```
 
-Результаты генерации сохраняются в каталог `out/`.
+Тестовые примеры лежат в `fixtures/python/` и `fixtures/csharp/`, поэтому
+набор самодостаточен. Результаты генерации сохраняются в каталог `out/`.
+
+Зависимость для запуска через pytest — `requirements-dev.txt`.
 
 ## Структура проекта
 
@@ -145,12 +157,16 @@ drawio-gen/
   optimizer.py           # объединение подряд идущих простых операторов
   drawio.py              # координаты -> mxGraph XML
   preview.py             # координаты -> SVG-предпросмотр
+  fixtures/python/       # примеры Python для тестов
   fixtures/csharp/       # примеры C# для тестов
   templates/index.html
   static/app.js
   static/style.css
-  test_generate.py       # проверка генерации и метрик
-  test_parsers.py        # юнит-тесты парсеров
+  test_parsers.py        # юнит-тесты парсеров и реестра
+  test_layout.py         # инварианты укладки и XML
+  test_app.py            # тесты HTTP-API
+  test_generate.py       # сквозная генерация и метрики
+  pytest.ini             # конфигурация pytest
 ```
 
 Пайплайн: `parser.parse` → IR → `layout` (x/y) → XML/SVG → ответ фронтенду →
