@@ -189,12 +189,30 @@ class _Parser:
             return [FuncCall(self._expr(stmt), self._call_name(call))]
 
         if isinstance(stmt, ast.Try):
-            nodes: list = list(self._parse_body(stmt.body))
+            result: list = list(self._parse_body(stmt.body))
+            catch_nodes: list = []
             for handler in stmt.handlers:
-                nodes.append(Other(self._seg(handler)))
-            nodes.extend(self._parse_body(stmt.orelse))
-            nodes.extend(self._parse_body(stmt.finalbody))
-            return nodes
+                parts = ["except"]
+                if handler.type is not None:
+                    parts.append(self._expr(handler.type))
+                if handler.name is not None:
+                    parts.append(handler.name)
+                label = " ".join(parts)
+                body = self._parse_body(handler.body)
+                if body:
+                    catch_nodes.append(Other(f"{label}:"))
+                    catch_nodes.extend(body)
+                else:
+                    catch_nodes.append(Other(label))
+            else_body = Sequence(self._parse_body(stmt.orelse)) if stmt.orelse else None
+            if catch_nodes:
+                result.append(If("exception", Sequence(catch_nodes), else_body))
+            elif else_body is not None:
+                result.extend(else_body.items)
+            if stmt.finalbody:
+                result.append(Other("finally:"))
+                result.extend(self._parse_body(stmt.finalbody))
+            return result
 
         return [Other(self._seg(stmt))]
 

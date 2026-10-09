@@ -27,6 +27,64 @@ from ..ir import (
 )
 from .base import LanguageParser, ParseError
 
+
+def _strip_comments(text: str) -> str:
+    """Удалить комментарии ``//`` и ``/* */``, не затрагивая литералы.
+
+    Наивный regex ломает строки вроде ``"http://example.com"`` или
+    ``"a /* b */ c"``, поэтому строковые и символьные литералы
+    (включая verbatim ``@"..."``) копируются дословно.
+    """
+    out: list[str] = []
+    i = 0
+    n = len(text)
+    while i < n:
+        ch = text[i]
+        if ch == "@" and i + 1 < n and text[i + 1] == '"':
+            out.append('@"')
+            i += 2
+            while i < n:
+                if text[i] == '"':
+                    if i + 1 < n and text[i + 1] == '"':
+                        out.append('""')
+                        i += 2
+                        continue
+                    out.append('"')
+                    i += 1
+                    break
+                out.append(text[i])
+                i += 1
+            continue
+        if ch in ('"', "'"):
+            quote = ch
+            out.append(ch)
+            i += 1
+            while i < n:
+                if text[i] == "\\" and i + 1 < n:
+                    out.append(text[i])
+                    out.append(text[i + 1])
+                    i += 2
+                    continue
+                out.append(text[i])
+                if text[i] == quote:
+                    i += 1
+                    break
+                i += 1
+            continue
+        if ch == "/" and i + 1 < n and text[i + 1] == "/":
+            while i < n and text[i] != "\n":
+                i += 1
+            continue
+        if ch == "/" and i + 1 < n and text[i + 1] == "*":
+            i += 2
+            while i + 1 < n and not (text[i] == "*" and text[i + 1] == "/"):
+                i += 1
+            i += 2
+            continue
+        out.append(ch)
+        i += 1
+    return "".join(out)
+
 #: Методы/функции, которые считаются операциями ввода/вывода .NET.
 _INPUT_MEMBERS = {"ReadLine", "Read"}
 _OUTPUT_MEMBERS = {"WriteLine", "Write"}
@@ -120,10 +178,11 @@ class _Walker:
         self._tree = tree
 
     def text(self, node) -> str:
-        """Вернуть исходный текст узла."""
+        """Вернуть исходный текст узла без комментариев."""
         if node is None:
             return ""
-        return self._raw[node.start_byte:node.end_byte].decode("utf-8").strip()
+        raw = self._raw[node.start_byte:node.end_byte].decode("utf-8").strip()
+        return _strip_comments(raw).strip()
 
     # --- страницы --------------------------------------------------------
     def pages(self) -> list[Page]:
@@ -193,6 +252,7 @@ class _Walker:
 
     def _statement(self, node) -> list:
         handler = {
+            "comment": lambda n: [],
             "block": self._st_block,
             "if_statement": self._st_if,
             "while_statement": self._st_while,
@@ -206,7 +266,7 @@ class _Walker:
             "continue_statement": lambda n: [Continue()],
             "local_declaration_statement": self._st_local,
             "expression_statement": self._st_expr,
-            "throw_statement": lambda n: [Other(self.text(n))],
+            "throw_statement": self._st_throw,
         }.get(node.type)
         if handler is not None:
             return handler(node)
@@ -334,12 +394,44 @@ class _Walker:
             condition = f"{condition} when {guard_text}"
         return condition
 
+    def _st_throw(self, node) -> list:
+        return [Return(self.text(node))]
+
     def _st_try(self, node) -> list:
-        nodes: list = list(self._statements(node.child_by_field_name("body")))
+        result = list(self._statements(node.child_by_field_name("body")))
+
+        catch_nodes: list = []
         for child in node.named_children:
-            if child.type in ("catch_clause", "finally_clause"):
-                nodes.append(Other(self.text(child)))
-        return nodes
+            if child.type == "catch_clause":
+                label = self._catch_condition(child)
+                body = self._statements(child.child_by_field_name("body"))
+                if body:
+                    catch_nodes.append(Other(f"{label}:"))
+                    catch_nodes.extend(body)
+                else:
+                    catch_nodes.append(Other(label))
+
+        if catch_nodes:
+            result.append(If("exception", Sequence(catch_nodes), None))
+
+        for child in node.named_children:
+            if child.type == "finally_clause":
+                block = next(
+                    (c for c in child.named_children if c.type == "block"), None
+                )
+                body = self._statements(block)
+                result.append(Other("finally:"))
+                result.extend(body)
+        return result
+
+    def _catch_condition(self, node) -> str:
+        for child in node.named_children:
+            if child.type == "catch_declaration":
+                text = self.text(child)
+                if text.startswith("(") and text.endswith(")"):
+                    return "catch " + text[1:-1].strip()
+                return "catch " + text
+        return "catch"
 
     def _st_return(self, node) -> list:
         return [Return(self.text(node))]

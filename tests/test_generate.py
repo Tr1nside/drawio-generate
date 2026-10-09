@@ -17,7 +17,7 @@ CASES = {
     "python/LAB3/17.py": {
         "language": "python",
         "pages": {"main", "main_2", "_input_data", "_check_triangle", "_check_equilateralism"},
-        "rhombus": 3,
+        "rhombus": 4,
         "io": 7,
         "max_crossings": 0,
     },
@@ -54,8 +54,8 @@ CASES = {
     "csharp/switch_try.cs": {
         "language": "csharp",
         "pages": {"main", "Divide"},
-        "rhombus": 3,
-        "io": 5,
+        "rhombus": 4,
+        "io": 7,
         "max_crossings": 0,
     },
 }

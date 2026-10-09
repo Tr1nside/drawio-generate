@@ -277,6 +277,112 @@ def test_convert_language_type():
     print("ok: нестроковый language не роняет сервер")
 
 
+def test_csharp_try_catch_throw():
+    code = (
+        "using System;\n"
+        "class P {\n"
+        "    static void Main() {\n"
+        "        try {\n"
+        "            int x = int.Parse(Console.ReadLine());\n"
+        "            if (x < 0)\n"
+        "                throw new Exception(\"negative\"); // comment here\n"
+        "            Console.WriteLine(x);\n"
+        "        }\n"
+        "        catch (Exception e) // catch comment\n"
+        "        {\n"
+        "            // log error\n"
+        "            Console.WriteLine(\"error\");\n"
+        "        }\n"
+        "        finally // finally comment\n"
+        "        {\n"
+        "            /* cleanup */\n"
+        "            Console.WriteLine(\"done\");\n"
+        "        }\n"
+        "    }\n"
+        "}\n"
+    )
+    pages = get_parser("csharp").parse(code)
+    nodes = _flatten(pages[0].body, [])
+    # throw should be a Return node, not Other
+    throws = [n for n in nodes if isinstance(n, Return)]
+    assert len(throws) == 1, f"expected 1 Return for throw, got {len(throws)}"
+    assert "negative" in throws[0].text
+    assert "//" not in throws[0].text, f"comment leaked into throw: {throws[0].text}"
+    # catch should be an "exception" conditional with catch handlers in its body
+    error_ifs = [n for n in nodes if isinstance(n, If) and n.condition == "exception"]
+    assert len(error_ifs) == 1, f"expected 1 exception If, got {[n.condition for n in nodes if isinstance(n, If)]}"
+    catch_labels = [n.text for n in error_ifs[0].body.items if isinstance(n, Other)]
+    assert any("catch Exception e" in t for t in catch_labels), f"no catch label: {catch_labels}"
+    assert error_ifs[0].else_body is None, "no-exception path must not add else body"
+    # finally stays as a labeled Other node after the conditional
+    others = [n for n in nodes if isinstance(n, Other)]
+    assert any("finally" in o.text for o in others), f"no finally label: {[o.text for o in others]}"
+    # no comment text should appear in any node
+    for n in nodes:
+        if hasattr(n, "text"):
+            assert "//" not in n.text, f"comment // leaked: {n.text}"
+            assert "/*" not in n.text, f"comment /* leaked: {n.text}"
+    # catch body should be parsed as normal statements (Output), not raw text
+    outputs = [n for n in nodes if isinstance(n, Output)]
+    assert any("error" in o.text for o in outputs), f"catch body not parsed: {outputs}"
+    assert any("done" in o.text for o in outputs), f"finally body not parsed: {outputs}"
+    print("ok: C# try-catch-finally-throw + no comments in nodes")
+
+
+def test_python_try_except():
+    code = (
+        "try:\n"
+        "    x = int(input())\n"
+        "except ValueError as e:  # comment\n"
+        "    # handle error\n"
+        "    print('invalid')\n"
+        "finally:\n"
+        "    # cleanup\n"
+        "    print('done')\n"
+    )
+    pages = get_parser("python").parse(code)
+    nodes = _flatten(pages[0].body, [])
+    error_ifs = [n for n in nodes if isinstance(n, If) and n.condition == "exception"]
+    assert len(error_ifs) == 1, f"expected 1 exception If, got {[n.condition for n in nodes if isinstance(n, If)]}"
+    except_labels = [n.text for n in error_ifs[0].body.items if isinstance(n, Other)]
+    assert any("except ValueError e" in t for t in except_labels), f"no except label: {except_labels}"
+    others = [n for n in nodes if isinstance(n, Other)]
+    assert any("finally" in o.text for o in others), f"no finally label: {[o.text for o in others]}"
+    # no comments in any node
+    for n in nodes:
+        if hasattr(n, "text"):
+            assert "#" not in n.text, f"comment leaked: {n.text}"
+    # except body should be parsed as normal statements
+    outputs = [n for n in nodes if isinstance(n, Output)]
+    assert any("invalid" in o.text for o in outputs), f"except body not parsed: {outputs}"
+    assert any("done" in o.text for o in outputs), f"finally body not parsed: {outputs}"
+    print("ok: Python try-except-finally + no comments in nodes")
+
+
+def test_csharp_comments_not_in_nodes():
+    code = (
+        "using System;\n"
+        "class P {\n"
+        "    static void Main() {\n"
+        '        Console.WriteLine("http://example.com"); // real comment\n'
+        '        string s = "a /* not a comment */ b";\n'
+        "        // standalone comment\n"
+        "        int x = 1; /* block */\n"
+        "        Console.WriteLine(s);\n"
+        "    }\n"
+        "}\n"
+    )
+    nodes = _flatten(get_parser("csharp").parse(code)[0].body, [])
+    # strings with comment-like content must survive intact
+    texts = [n.text for n in nodes if hasattr(n, "text")]
+    assert any("http://example.com" in t for t in texts), texts
+    assert any("a /* not a comment */ b" in t for t in texts), texts
+    # standalone comments must not become nodes
+    assert all(t.strip() for t in texts), f"empty node leaked: {texts}"
+    assert not any("real comment" in t or "standalone" in t for t in texts), texts
+    print("ok: C# комментарии не попадают в ноды, строки не ломаются")
+
+
 def main() -> int:
     tests = [
         test_registry,
@@ -289,6 +395,9 @@ def main() -> int:
         test_csharp_switch_discard,
         test_csharp_top_level_statements,
         test_csharp_switch_pattern_labels,
+        test_csharp_try_catch_throw,
+        test_python_try_except,
+        test_csharp_comments_not_in_nodes,
         test_coalesce,
         test_parse_errors,
         test_convert_language_type,
