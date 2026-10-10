@@ -6,8 +6,11 @@ import os
 import sys
 import time
 
-from flask import Flask, jsonify, render_template, request
+from io import BytesIO
 
+from flask import Flask, Response, jsonify, render_template, request
+
+from ..docx_format import build_docx, build_rtf, highlight_html
 from ..layout import layout_pages
 from ..parsers import ParseError, available_languages, detect_language, get_parser
 from ..render import build_mxfile, build_previews
@@ -131,6 +134,70 @@ def convert():
     )
 
 
+@app.post("/format")
+def format_code():
+    data = request.get_json(silent=True) or {}
+    code = data.get("code") or request.form.get("code", "")
+    raw_language = data.get("language") or request.form.get("language") or "auto"
+    language = str(raw_language).strip()
+
+    if not isinstance(code, str) or not code.strip():
+        return jsonify(error="Пустой код"), 400
+
+    try:
+        html, lang_name = highlight_html(code, language)
+    except Exception as exc:
+        logger.exception("format: ошибка подсветки")
+        return jsonify(error=f"Ошибка: {exc}"), 400
+
+    return jsonify(html=html, language=lang_name)
+
+
+@app.post("/download")
+def download():
+    data = request.get_json(silent=True) or {}
+    code = data.get("code") or request.form.get("code", "")
+    raw_language = data.get("language") or request.form.get("language") or "auto"
+    language = str(raw_language).strip()
+
+    if not isinstance(code, str) or not code.strip():
+        return jsonify(error="Пустой код"), 400
+
+    try:
+        buf = build_docx(code, language)
+    except Exception as exc:
+        logger.exception("download: ошибка генерации docx")
+        return jsonify(error=f"Ошибка: {exc}"), 400
+
+    return Response(
+        buf.read(),
+        mimetype="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        headers={
+            "Content-Disposition": 'attachment; filename="code.docx"',
+            "Content-Length": str(buf.tell()),
+        },
+    )
+
+
+@app.post("/clipboard")
+def clipboard():
+    data = request.get_json(silent=True) or {}
+    code = data.get("code") or request.form.get("code", "")
+    raw_language = data.get("language") or request.form.get("language") or "auto"
+    language = str(raw_language).strip()
+
+    if not isinstance(code, str) or not code.strip():
+        return jsonify(error="Пустой код"), 400
+
+    try:
+        rtf = build_rtf(code, language)
+    except Exception as exc:
+        logger.exception("clipboard: ошибка генерации RTF")
+        return jsonify(error=f"Ошибка: {exc}"), 400
+
+    return jsonify(rtf=rtf)
+
+
 def _proxy_warning() -> str | None:
     proxy = (
         os.environ.get("HTTP_PROXY")
@@ -155,7 +222,7 @@ def _print_banner(host: str, port: int, debug: bool) -> None:
     lines = [
         "",
         "  ┌─────────────────────────────────────────────┐",
-        "  │  Генератор блок-схем (drawio)               │",
+        "  │  Генератор блок-схем + Код в Word           │",
         "  └─────────────────────────────────────────────┘",
         f"  Откройте:   {url}",
         f"  Режим:      {'отладка' if debug else 'обычный'}",

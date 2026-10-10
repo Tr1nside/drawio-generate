@@ -19,6 +19,7 @@
   --canvas: #ffffff;
   --canvas-text: #1b2330;
   --canvas-muted: #5b6675;
+  --code-bg: #f7f9fc;
   --scroll: #c3ccda;
   --scroll-hover: #a9b4c6;
   --radius: 14px;
@@ -46,6 +47,7 @@
   --canvas: #ffffff;
   --canvas-text: #1b2330;
   --canvas-muted: #5b6675;
+  --code-bg: #1a1f2b;
   --scroll: #33404f;
   --scroll-hover: #46566a;
 }
@@ -256,6 +258,80 @@ code {
   outline: none;
   border-color: var(--accent);
   box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+/* Mode tabs ------------------------------------------------------------ */
+.mode-tabs {
+  display: flex;
+  gap: 4px;
+  flex: 0 0 auto;
+}
+
+.mode-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--panel-2);
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 650;
+  cursor: pointer;
+  transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+
+.mode-tab svg {
+  width: 16px;
+  height: 16px;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.mode-tab:hover {
+  color: var(--text);
+  border-color: var(--border-strong);
+}
+
+.mode-tab--active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--on-accent);
+}
+
+/* Mode visibility ------------------------------------------------------ */
+.mode-word-btn,
+.mode-word-el {
+  display: none;
+}
+
+.mode-diagram-btn,
+.mode-diagram-el {
+  display: inline-flex;
+}
+
+[data-mode="word"] .mode-word-btn,
+[data-mode="word"] .mode-word-el {
+  display: inline-flex;
+}
+
+[data-mode="word"] .mode-diagram-btn,
+[data-mode="word"] .mode-diagram-el {
+  display: none;
+}
+
+[data-mode="word"] .preview {
+  background: var(--code-bg);
+}
+
+/* Lang label ----------------------------------------------------------- */
+.lang-label {
+  margin-left: auto;
+  font-size: 12px;
+  color: var(--muted);
+  font-weight: 600;
 }
 
 /* Layout --------------------------------------------------------------- */
@@ -515,6 +591,18 @@ button:focus-visible,
 
 .preview svg .linkable:hover {
   filter: drop-shadow(0 0 2px var(--accent));
+}
+
+.preview pre {
+  margin: 0;
+  padding: 0;
+  font-family: "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  font-size: 14px;
+  line-height: 1.5;
+  tab-size: 4;
+  white-space: pre;
+  color: var(--text);
+  animation: fade-in 0.25s ease;
 }
 
 @keyframes fade-in {

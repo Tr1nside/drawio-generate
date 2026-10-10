@@ -3,7 +3,65 @@
 from ..ir import Page
 from ..optimizer import coalesce_pages
 from .engine import LayoutEngine
-from .geometry import GAP, J, LANE_W, TERM_H, TERM_W, PageLayout
+from .geometry import GAP, J, LANE_W, TERM_H, TERM_W, Edge, PageLayout
+
+
+def _compress_junctions(cells, edges):
+    opposite = {"t": "b", "b": "t", "l": "r", "r": "l"}
+
+    while True:
+        cells_by_id = {c.cid: c for c in cells}
+        junction_ids = {c.cid for c in cells if c.kind == "junction"}
+        if not junction_ids:
+            break
+
+        in_edges = {}
+        out_edges = {}
+        for i, e in enumerate(edges):
+            if e.target in junction_ids:
+                in_edges.setdefault(e.target, []).append((i, e))
+            if e.source in junction_ids:
+                out_edges.setdefault(e.source, []).append((i, e))
+
+        compressible = set()
+        for jid in junction_ids:
+            in_list = in_edges.get(jid, [])
+            out_list = out_edges.get(jid, [])
+            if len(in_list) != 1 or len(out_list) != 1:
+                continue
+            in_e = in_list[0][1]
+            out_e = out_list[0][1]
+            if in_e.entry_side != opposite.get(out_e.exit_side):
+                continue
+            compressible.add(jid)
+
+        if not compressible:
+            break
+
+        to_remove = set()
+        to_add = []
+        for jid in compressible:
+            in_idx, in_e = in_edges[jid][0]
+            out_idx, out_e = out_edges[jid][0]
+            if in_idx in to_remove or out_idx in to_remove:
+                continue
+            j = cells_by_id[jid]
+            waypoints = in_e.waypoints + out_e.waypoints
+            to_add.append(Edge(
+                source=in_e.source,
+                target=out_e.target,
+                label=in_e.label or out_e.label,
+                waypoints=list(waypoints),
+                exit_side=in_e.exit_side,
+                entry_side=out_e.entry_side,
+            ))
+            to_remove.add(in_idx)
+            to_remove.add(out_idx)
+
+        edges = [e for i, e in enumerate(edges) if i not in to_remove] + to_add
+        cells = [c for c in cells if c.cid not in compressible]
+
+    return cells, edges
 
 
 def layout_page(page: Page) -> PageLayout:
@@ -71,7 +129,8 @@ def layout_page(page: Page) -> PageLayout:
     width = right_extent + offset
 
     height = end.y + end.h
-    return PageLayout(page.name, engine.cells, engine.edges, width, height, page.func_name)
+    cells, edges = _compress_junctions(engine.cells, engine.edges)
+    return PageLayout(page.name, cells, edges, width, height, page.func_name)
 
 
 def layout_pages(pages: list[Page]) -> list[PageLayout]:

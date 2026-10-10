@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="light dark">
-  <title>Генератор блок-схем (drawio)</title>
+  <title>Генератор блок-схем + Код в Word</title>
   <script>
     (function () {
       try {
@@ -31,11 +31,26 @@
           </svg>
         </span>
         <div class="brand__text">
-          <h1>Генератор блок-схем</h1>
-          <p class="hint">Код <b>Python</b> или <b>C#</b> → файл <code>.drawio</code> с одной страницей на функцию</p>
+          <h1 id="app-title">Генератор блок-схем</h1>
+          <p id="app-hint" class="hint">Код <b>Python</b> или <b>C#</b> → файл <code>.drawio</code> с одной страницей на функцию</p>
         </div>
       </div>
       <div class="header-controls">
+        <div class="mode-tabs" role="tablist" aria-label="Режим">
+          <button id="mode-diagram" class="mode-tab mode-tab--active" type="button" role="tab" aria-selected="true">
+            <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor">
+              <path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6-10-6-10-6z"/>
+              <circle cx="12" cy="12" r="2.6"/>
+            </svg>
+            Блок-схема
+          </button>
+          <button id="mode-word" class="mode-tab" type="button" role="tab" aria-selected="false">
+            <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor">
+              <path d="M6 5h4v6h-4v-2h4v6h-4M14 7v10"/>
+            </svg>
+            Код в Word
+          </button>
+        </div>
         <label class="language">
           <span class="language__label">Язык</span>
           <select id="language" aria-label="Язык программирования">
@@ -68,21 +83,37 @@
             </svg>
             Код программы
           </span>
-          <span class="pane-hint">Ctrl / ⌘ + Enter — построить</span>
+          <span id="pane-hint" class="pane-hint">Ctrl / ⌘ + Enter — построить</span>
         </div>
         <textarea id="code" spellcheck="false" placeholder="def main():
     ..."></textarea>
 
         <div class="actions">
-          <button id="convert" type="button" class="btn btn-primary">
+          <button id="convert" type="button" class="btn btn-primary mode-diagram-btn">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4l12 8-12 8z" fill="currentColor"/></svg>
             Построить блок-схему
           </button>
-          <button id="download" type="button" class="btn btn-ghost" disabled>
+          <button id="download-diagram" type="button" class="btn btn-ghost mode-diagram-btn" disabled>
             <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor">
               <path d="M12 3v12M7 10l5 5 5-5M4 20h16"/>
             </svg>
             Скачать .drawio
+          </button>
+          <button id="format" type="button" class="btn btn-primary mode-word-btn">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4l12 8-12 8z" fill="currentColor"/></svg>
+            Форматировать
+          </button>
+          <button id="copy-word" type="button" class="btn btn-ghost mode-word-btn" disabled>
+            <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor">
+              <path d="M6 5h4v6h-4v-2h4v6h-4M14 7v10"/>
+            </svg>
+            Копировать в Word
+          </button>
+          <button id="download-docx" type="button" class="btn btn-ghost mode-word-btn" disabled>
+            <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor">
+              <path d="M12 3v12M7 10l5 5 5-5M4 20h16"/>
+            </svg>
+            Скачать .docx
           </button>
         </div>
 
@@ -98,12 +129,13 @@
             </svg>
             Предпросмотр
           </span>
-          <div id="tabs" class="tabs" role="tablist"></div>
-          <div class="zoom">
+          <div id="tabs" class="tabs mode-diagram-el" role="tablist"></div>
+          <div class="zoom mode-diagram-el">
             <button id="zoom-out" type="button" title="Уменьшить" aria-label="Уменьшить">−</button>
             <span id="zoom-level">60%</span>
             <button id="zoom-in" type="button" title="Увеличить" aria-label="Увеличить">+</button>
           </div>
+          <span id="lang-label" class="lang-label mode-word-el"></span>
         </div>
         <div id="preview" class="preview">
           <div class="preview-empty">

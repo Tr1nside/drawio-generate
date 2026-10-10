@@ -1,2 +1,4 @@
 flask
 tree-sitter-language-pack>=1.20,<2
+python-docx
+pygments

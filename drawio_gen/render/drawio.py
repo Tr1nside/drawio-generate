@@ -33,7 +33,7 @@ ANCHORS = {
     "b": (0.5, 1.0),
 }
 
-EDGE_STYLE = "rounded=0;html=1;endArrow=block;"
+EDGE_STYLE = "rounded=0;html=1;endArrow=block;edgeStyle=orthogonalEdgeStyle;"
 
 
 def _anchor_style(exit_side: str, entry_side: str) -> str:
